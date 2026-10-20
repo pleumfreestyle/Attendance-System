@@ -23,7 +23,7 @@ This folder contains a proposed API implementation. It is **not deployed by GitH
 - `GET /api/attendance` — employee sees their own records; supervisor/admin can see recent records.
 - `POST /api/attendance` — validates token, coordinates, reported accuracy, configured geofence, and daily check-in/out sequence before writing to D1.
 - `GET /api/admin/personnel` — admin-only personnel list.
-- `POST /api/admin/approve` — admin-only account activation/suspension with audit log.\n- `GET/POST/PATCH /api/admin/locations` — admin-only location listing, creation, radius changes, and activation/deactivation.\n- `GET/POST /api/admin/shifts` — admin-only shift listing and creation.\n- `POST /api/leave-requests` — authenticated staff leave request submission.\n- `GET /api/admin/leaves` and `POST /api/admin/leaves/review` — admin-only leave review with audit log.
+- `POST /api/admin/approve` — admin-only account activation/suspension with audit log.\n- `POST /api/admin/personnel/role` — admin-only role changes for staff, supervisor, and admin, with audit log.\n- `GET/POST/PATCH /api/admin/locations` — admin-only location listing, creation, radius changes, and activation/deactivation.\n- `GET/POST /api/admin/shifts` — admin-only shift listing and creation.\n- `POST /api/leave-requests` — authenticated staff leave request submission.\n- `GET /api/admin/leaves` and `POST /api/admin/leaves/review` — admin-only leave review with audit log.
 
 ## Important security notes
 - Browser GPS is not proof against a determined spoofing attack. The API performs server-side checks, but policy may require managed devices, additional verification, or manual review.

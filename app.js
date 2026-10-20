@@ -146,7 +146,7 @@ function page_login(){
 function page_forgot(){
  const f=document.getElementById('f'),m=document.getElementById('msg'),button=f.querySelector('button');
  f.onsubmit=async e=>{e.preventDefault();const email=document.getElementById('email').value.trim().toLowerCase();
-  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){m.style.color='#dc2626';m.textContent='กรุณากรอกอีเมลให้ถูกต้อง';return}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){m.style.color='#dc2626';m.textContent='กรุณากรอกอีเมลให้ถูกต้อง';return}
   button.disabled=true;button.textContent='กำลังส่งคำขอ...';
   try{const d=await fetch(API_BASE+'/api/password-reset-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});const result=await d.json();if(!d.ok||!result.success)throw Error(result.message||'ส่งคำขอไม่สำเร็จ');m.style.color='#166534';m.textContent=result.message;f.reset()}
   catch(err){m.style.color='#dc2626';m.textContent=err.message||'เชื่อมต่อระบบไม่ได้ กรุณาลองใหม่'}

@@ -190,6 +190,7 @@ export default {
         const email = String(data?.email || "").trim().toLowerCase();
         const password = String(data?.password || "");
         if (!email || !password) return json({ success: false, message: "กรุณากรอกอีเมลและรหัสผ่าน" }, 400, cors);
+        if (password.length > 128) return json({ success: false, message: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }, 401, cors);
         const user = await env.DB.prepare("SELECT id, staff_code, full_name, email, position, password_hash, role, is_active, token_version FROM personnel WHERE email = ? COLLATE NOCASE").bind(email).first();
         if (!user || !(await verifyPassword(password, user.password_hash))) return json({ success: false, message: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }, 401, cors);
         if (!user.is_active) return json({ success: false, message: "บัญชียังไม่ได้รับอนุมัติหรือถูกระงับ กรุณาติดต่อผู้ดูแล" }, 403, cors);
@@ -206,6 +207,7 @@ export default {
         const data = await body();
         const currentPassword = String(data?.currentPassword || "");
         const newPassword = String(data?.newPassword || "");
+        if (currentPassword.length > 128) return json({ success: false, message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" }, 400, cors);
         const row = await env.DB.prepare("SELECT password_hash FROM personnel WHERE id = ?").bind(user.id).first();
         if (!row || !(await verifyPassword(currentPassword, row.password_hash))) return json({ success: false, message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" }, 400, cors);
         if (newPassword.length < 8 || newPassword.length > 128 || newPassword === currentPassword) return json({ success: false, message: "รหัสผ่านใหม่ต้องมี 8–128 ตัวอักษรและต้องต่างจากรหัสผ่านเดิม" }, 400, cors);

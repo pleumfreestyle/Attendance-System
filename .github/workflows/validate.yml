@@ -1,0 +1,35 @@
+name: Validate attendance app
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, feature/real-attendance-backend]
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-and-safety-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check frontend JavaScript syntax
+        run: node --check app.js
+      - name: Check Cloudflare Worker module syntax
+        run: node --input-type=module --check < cloudflare/worker.js
+      - name: Verify required backend protections remain present
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'REQUEST_TOO_LARGE' cloudflare/worker.js
+          grep -q 'idx_attendance_one_type_per_day' cloudflare/schema.sql
+          grep -q 'url.pathname === "/webhook"' cloudflare/worker.js
+          grep -q 'url.pathname === "/test-send"' cloudflare/worker.js
+          grep -q 'function isValidISODate' cloudflare/worker.js
+          echo "Required static guards found."

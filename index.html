@@ -1,0 +1,161 @@
+<!doctype html><html lang="th">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>ระบบลงชื่อเข้า-ออกงาน</title>
+        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    </head>
+    <body>
+        <div id="app"></div>
+        <template id="t-login">
+            <main class="login">
+            <div class="card" style="max-width:400px;margin:auto">
+                <div style="text-align:center">
+                    <img src="images/LOGO.png" alt="Logo" style="width: 150px;">
+                </div>
+                
+                <div class="card">
+                    
+                    <h1 style="text-align:center">ระบบเช็คชื่อสำหรับบุคลากร</h1>
+                    <form id="f" novalidate>
+                        <label for="email">ชื่อผู้ใช้</label>
+                        <input id="email" name="email" type="text" autocomplete="username">
+                        <label for="pw">รหัสผ่าน</label>
+                        <input id="pw" type="password" autocomplete="current-password">
+                        <label>
+                            <input id="show" type="checkbox" style="width:auto"> แสดงรหัสผ่าน
+                        </label>
+                        <p id="err" class="msg" style="color:#dc2626" role="alert"></p>
+                        <p style="margin:8px 0">
+                            <a href="#/forgot-password">ลืมรหัสผ่าน?</a>
+                        </p>
+                        <button class="btn" style="width:100%">เข้าสู่ระบบ</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <b>บัญชีทดลอง (เดโมเท่านั้น)</b>
+                    <p>พนักงาน: employee@example.com / Employee123!</p>
+                    <p>หัวหน้า: supervisor@example.com / Supervisor123!</p>
+                    <p>ผู้ดูแล: admin@example.com / Admin123!</p>
+                    <button id="reset" class="btn o" type="button">รีเซ็ตข้อมูลตัวอย่าง</button>
+                </div>
+                <span>
+                    ไม่มีบัญชี?
+                    <a href="#/register">สมัครสมาชิก</a>
+                </span>
+            </div>
+            </main>
+        </template>
+
+        <template id="t-forgot-password">
+            <main class="login">
+                <div class="card">
+                        <h1>
+                        ลืมรหัสผ่าน
+                        </h1>
+                    <form id="f" novalidate>
+                        <label for="email">
+                            อีเมล
+                        </label>
+                        <input id="email" type="email">
+                            <p id="msg" class="msg" role="alert"></p>
+                        <button class="btn" style="width:100%">ส่งลิงก์รีเซ็ต (จำลอง)</button>
+                    </form>
+                    <p style="margin-top:12px">
+                        <a href="#/login">กลับไปหน้าเข้าสู่ระบบ</a>
+                    </p>
+                </div>
+            </main>
+        </template> 
+        <template id="t-register">
+            <main class="login">
+                <div class="card">
+                    <h1>
+                        สมัครสมาชิก
+                    </h1>
+                    <form id="f" novalidate>
+                        <label for="nm">ชื่อ-นามสกุล</label>
+                        <input id="nm" type="text" autocomplete="name">
+                        <label for="email">
+                            อีเมล
+                        </label>
+                        <input id="email" type="email" autocomplete="username">
+                        <label for="pw">
+                            รหัสผ่าน
+                        </label>
+                        <input id="pw" type="password" autocomplete="new-password">
+                        <label for="pw2">
+                            ยืนยันรหัสผ่าน
+                        </label>
+                        <input id="pw2" type="password" autocomplete="new-password">
+                        <p id="msg" class="msg" role="alert"></p>
+                        <button class="btn" style="width:100%">สมัครสมาชิก</button>
+                    </form>
+                    <p style="margin-top:12px">
+                        มีบัญชีแล้ว?
+                        <a href="#/login">เข้าสู่ระบบ</a>
+                    </p>
+                </div>
+            </main>
+        </template>
+<template id="t-attendance">
+    <div class="card">
+        <p>เวลาปัจจุบัน: 
+            <b id="clk">
+
+            </b>
+        </p>
+        <p>กะงาน: 
+            <span id="sh"></span>
+        </p>
+        <p>สถานที่: 
+            <span id="wp"></span>
+        </p>
+    </div>
+    <div id="map"></div>
+    <div class="card" style="margin-top:16px">
+        <p>สถานะ GPS: <span id="gps"></span></p>
+        <p>ความแม่นยำ: <span id="acc">-</span></p>
+        <p>ระยะห่างจากที่ทำงาน: <b id="dist">-</b></p>
+        <p>สถานะวันนี้: <b id="stt"></b></p>
+        <div class="row">
+            <button id="rf" class="btn">รีเฟรชตำแหน่ง / ลองใหม่</button>
+            <button id="ci" class="btn g">ลงชื่อเข้างาน</button>
+            <button id="co" class="btn o">ลงชื่อออกงาน</button>
+        </div>
+        <label for="dev">โหมดพัฒนาเท่านั้น (ไม่ใช่ GPS จริง)</label>
+        <select id="dev">
+            <option value="">ใช้ GPS จริง</option>
+            <option value="in">จำลอง: อยู่ในพื้นที่</option>
+            <option value="out">จำลอง: อยู่นอกพื้นที่</option>
+        </select>
+    </div>
+</template>
+<template id="t-attendance-history">
+    <div class="card">
+        <div class="row">
+            <div>
+                <label for="dt">วันที่</label>
+                <input id="dt" type="date">
+            </div>
+            <div>
+                <label for="mo">เดือน</label>
+                <input id="mo" type="month">
+            </div>
+            <div>
+                <label for="st">สถานะ</label>
+                <select id="st">
+                    <option value="">ทั้งหมด</option>
+                    <option value="late">สาย</option>
+                    <option value="ok">ตรงเวลา</option>
+                </select>
+            </div>
+            <button id="rs" class="btn">ล้างตัวกรอง</button>
+        </div>
+    </div>
+    <div class="card" id="out"></div>
+</template>
+<script src="app.js"></script>
+</body></html>

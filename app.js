@@ -160,7 +160,8 @@ async function page_dashboard(u){
  try{
   const data=await apiFetch('/api/attendance');const records=data.records||[];
   const dayKey=x=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(x));
-  const today=records.filter(x=>dayKey(x.recorded_at)===dayKey(Date.now()));
+  const mine=records.filter(x=>Number(x.personnel_id)===Number(u.id));
+  const today=mine.filter(x=>dayKey(x.recorded_at)===dayKey(Date.now()));
   const ci=today.find(x=>x.attendance_type==='check_in'),co=today.find(x=>x.attendance_type==='check_out');
   const welcome=card('สวัสดี '+(u.name||''),'ข้อมูลจาก Cloudflare D1 · '+new Date().toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',dateStyle:'full'}));
   const stats=h('div','grid');stats.append(stat('สถานะวันนี้',!ci?'ยังไม่ลงเวลา':co?'ลงเวลาครบ':'เข้างานแล้ว'),stat('เวลาเข้า',ci?new Date(ci.recorded_at).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}):'—'),stat('เวลาออก',co?new Date(co.recorded_at).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}):'—'),stat('รายการที่โหลด',records.length+' รายการ'));

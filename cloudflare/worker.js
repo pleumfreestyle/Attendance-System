@@ -266,6 +266,13 @@ export default {
         return json({ success: true, message: "เพิ่มกะทำงานแล้ว", id: result.meta?.last_row_id }, 201, cors);
       }
 
+      if (url.pathname === "/api/leave-requests" && request.method === "GET") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        const rows = await env.DB.prepare("SELECT id, leave_type, start_date, end_date, reason, status, reviewed_at, created_at FROM leave_requests WHERE personnel_id = ? ORDER BY created_at DESC LIMIT 100").bind(user.id).all();
+        return json({ success: true, requests: rows.results || [] }, 200, cors);
+      }
+
       if (url.pathname === "/api/leave-requests" && request.method === "POST") {
         const user = await readToken(request, env);
         if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);

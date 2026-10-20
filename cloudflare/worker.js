@@ -78,7 +78,11 @@ function fromB64urlSafeBase64(value) {
   return Uint8Array.from(atob(value), c => c.charCodeAt(0));
 }
 function thaiDate() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+  return values.year + "-" + values.month + "-" + values.day;
 }
 function distanceMeters(aLat, aLng, bLat, bLng) {
   const rad = n => n * Math.PI / 180;
@@ -244,9 +248,20 @@ export default {
         const iterations = 210000, salt = crypto.getRandomValues(new Uint8Array(16));
         const hash = await passwordHash(tempPassword, salt, iterations);
         const stored = "pbkdf2$" + iterations + "$" + base64(salt) + "$" + base64(hash);
-        await env.DB.prepare("UPDATE personnel SET password_hash = ?, token_version = token_version + 1 WHERE id = ?").bind(stored, person.id).run();
-        await env.DB.prepare("UPDATE password_reset_requests SET status = 'completed', processed_by = ?, processed_at = datetime('now') WHERE id = ? AND status = 'pending'").bind(user.id, id).run();
-        await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "password_reset_admin", "request_id=" + id + "; personnel_id=" + person.id).run();
+        // D1 batch is transactional: only reset the password if this request is still pending.
+        // This prevents two admins from processing the same request and issuing competing passwords.
+        const resetResults = await env.DB.batch([
+          env.DB.prepare(`UPDATE personnel
+            SET password_hash = ?, token_version = token_version + 1
+            WHERE id = ? AND EXISTS (
+              SELECT 1 FROM password_reset_requests WHERE id = ? AND status = 'pending'
+            )`).bind(stored, person.id, id),
+          env.DB.prepare("UPDATE password_reset_requests SET status = 'completed', processed_by = ?, processed_at = datetime('now') WHERE id = ? AND status = 'pending'").bind(user.id, id),
+          env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) SELECT ?, ?, ? WHERE changes() >= 0 AND EXISTS (SELECT 1 FROM password_reset_requests WHERE id = ? AND status = 'completed' AND processed_by = ?)").bind(user.id, "password_reset_admin", "request_id=" + id + "; personnel_id=" + person.id, id, user.id)
+        ]);
+        if (Number(resetResults?.[0]?.meta?.changes || 0) !== 1 || Number(resetResults?.[1]?.meta?.changes || 0) !== 1) {
+          return json({ success: false, message: "คำขอนี้ถูกจัดการไปแล้ว กรุณารีเฟรชรายการ" }, 409, cors);
+        }
         return json({ success: true, message: "ออก temporary password แล้ว โปรดส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้ และให้เปลี่ยนทันทีหลังเข้าสู่ระบบ", temporaryPassword: tempPassword }, 200, cors);
       }
 
@@ -301,8 +316,38 @@ export default {
         if (data.type === "check_out" && (!records.some(x => x.attendance_type === "check_in") || records.some(x => x.attendance_type === "check_out"))) return json({ success: false, message: "ไม่สามารถลงเวลาออกได้ กรุณาตรวจสอบการลงเวลาเข้า-ออก" }, 409, cors);
         const now = new Date().toISOString();
         const note = "ระยะจากจุดทำงานประมาณ " + Math.round(distance) + " เมตร; GPS accuracy " + Math.round(accuracy) + " เมตร";
-        const result = await env.DB.prepare("INSERT INTO attendance_records (personnel_id, attendance_type, recorded_at, latitude, longitude, face_verified, note) VALUES (?, ?, ?, ?, ?, 0, ?)")
-          .bind(user.id, data.type, now, lat, lng, note).run();
+        // Enforce order and one record per type/day inside the INSERT itself.
+        // The unique index remains the final guard against simultaneous requests.
+        const result = await env.DB.prepare(`
+          INSERT INTO attendance_records
+            (personnel_id, attendance_type, recorded_at, latitude, longitude, face_verified, note)
+          SELECT ?, ?, ?, ?, ?, 0, ?
+          WHERE
+            (? = 'check_in' AND NOT EXISTS (
+              SELECT 1 FROM attendance_records
+              WHERE personnel_id = ? AND attendance_type = 'check_in'
+                AND date(recorded_at, '+7 hours') = ?
+            ))
+            OR
+            (? = 'check_out' AND EXISTS (
+              SELECT 1 FROM attendance_records
+              WHERE personnel_id = ? AND attendance_type = 'check_in'
+                AND date(recorded_at, '+7 hours') = ?
+            ) AND NOT EXISTS (
+              SELECT 1 FROM attendance_records
+              WHERE personnel_id = ? AND attendance_type = 'check_out'
+                AND date(recorded_at, '+7 hours') = ?
+            ))
+        `).bind(
+          user.id, data.type, now, lat, lng, note,
+          data.type, user.id, day,
+          data.type, user.id, day, user.id, day
+        ).run();
+        if (Number(result.meta?.changes || 0) !== 1) {
+          return json({ success: false, message: data.type === "check_in"
+            ? "วันนี้ลงเวลาเข้างานแล้ว หรือมีคำขอลงเวลาพร้อมกัน"
+            : "ไม่สามารถลงเวลาออกได้ กรุณาตรวจสอบการลงเวลาเข้า-ออกหรือมีคำขอพร้อมกัน" }, 409, cors);
+        }
         return json({ success: true, message: data.type === "check_in" ? "ลงเวลาเข้างานสำเร็จ" : "ลงเวลาออกงานสำเร็จ", id: result.meta?.last_row_id, recordedAt: now, distance: Math.round(distance) }, 201, cors);
       }
 

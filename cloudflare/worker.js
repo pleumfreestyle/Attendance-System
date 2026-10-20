@@ -192,6 +192,93 @@ export default {
         return json({ success: true, message: data.type === "check_in" ? "ลงเวลาเข้างานสำเร็จ" : "ลงเวลาออกงานสำเร็จ", id: result.meta?.last_row_id, recordedAt: now, distance: Math.round(distance) }, 201, cors);
       }
 
+
+      if (url.pathname === "/api/admin/locations" && request.method === "GET") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);
+        const rows = await env.DB.prepare("SELECT id, name, latitude, longitude, radius_meters, is_active, created_at FROM work_locations ORDER BY is_active DESC, id").all();
+        return json({ success: true, locations: rows.results || [] }, 200, cors);
+      }
+
+      if (url.pathname === "/api/admin/locations" && request.method === "POST") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);
+        const data = await body();
+        const name = String(data?.name || "").trim();
+        const latitude = Number(data?.latitude), longitude = Number(data?.longitude), radius = Number(data?.radiusMeters);
+        if (!name || name.length > 120 || !Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180 || !Number.isInteger(radius) || radius < 10 || radius > 5000) {
+          return json({ success: false, message: "กรุณาตรวจสอบชื่อ พิกัด และรัศมี (10–5,000 เมตร)" }, 400, cors);
+        }
+        const result = await env.DB.prepare("INSERT INTO work_locations (name, latitude, longitude, radius_meters, is_active) VALUES (?, ?, ?, ?, 1)").bind(name, latitude, longitude, radius).run();
+        await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "work_location_created", "location_id=" + result.meta?.last_row_id + "; name=" + name + "; radius_meters=" + radius).run();
+        return json({ success: true, message: "เพิ่มสถานที่ทำงานแล้ว", id: result.meta?.last_row_id }, 201, cors);
+      }
+
+      if (url.pathname === "/api/admin/locations" && request.method === "PATCH") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);
+        const data = await body();
+        const id = Number(data?.id);
+        const active = data?.active;
+        const radius = data?.radiusMeters;
+        if (!Number.isInteger(id) || id < 1 || (typeof active !== "boolean" && !(Number.isInteger(radius) && radius >= 10 && radius <= 5000))) return json({ success: false, message: "ข้อมูลแก้ไขสถานที่ไม่ถูกต้อง" }, 400, cors);
+        let result;
+        if (typeof active === "boolean") {
+          result = await env.DB.prepare("UPDATE work_locations SET is_active = ? WHERE id = ?").bind(active ? 1 : 0, id).run();
+        } else {
+          result = await env.DB.prepare("UPDATE work_locations SET radius_meters = ? WHERE id = ?").bind(radius, id).run();
+        }
+        if (!result.meta?.changes) return json({ success: false, message: "ไม่พบสถานที่ทำงาน" }, 404, cors);
+        await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, typeof active === "boolean" ? "work_location_status_changed" : "work_location_radius_changed", "location_id=" + id).run();
+        return json({ success: true, message: "บันทึกการตั้งค่าสถานที่แล้ว" }, 200, cors);
+      }
+
+      if (url.pathname === "/api/admin/shifts" && request.method === "GET") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);
+        const rows = await env.DB.prepare("SELECT id, name, start_time, end_time, grace_minutes, is_active, created_at FROM shifts ORDER BY is_active DESC, id").all();
+        return json({ success: true, shifts: rows.results || [] }, 200, cors);
+      }
+
+      if (url.pathname === "/api/admin/shifts" && request.method === "POST") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);
+        const data = await body();
+        const name = String(data?.name || "").trim();
+        const start = String(data?.startTime || ""), end = String(data?.endTime || "");
+        const grace = Number(data?.graceMinutes ?? 0);
+        if (!name || name.length > 100 || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(start) || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(end) || !Number.isInteger(grace) || grace < 0 || grace > 240) return json({ success: false, message: "กรุณาตรวจสอบชื่อกะ เวลา และเวลาผ่อนผัน" }, 400, cors);
+        const result = await env.DB.prepare("INSERT INTO shifts (name, start_time, end_time, grace_minutes, is_active) VALUES (?, ?, ?, ?, 1)").bind(name, start, end, grace).run();
+        await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "shift_created", "shift_id=" + result.meta?.last_row_id + "; name=" + name).run();
+        return json({ success: true, message: "เพิ่มกะทำงานแล้ว", id: result.meta?.last_row_id }, 201, cors);
+      }
+
+      if (url.pathname === "/api/admin/leaves" && request.method === "GET") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);
+        const rows = await env.DB.prepare("SELECT l.id, l.personnel_id, p.full_name, p.staff_code, l.leave_type, l.start_date, l.end_date, l.reason, l.status, l.reviewed_by, l.reviewed_at, l.created_at FROM leave_requests l JOIN personnel p ON p.id = l.personnel_id ORDER BY CASE l.status WHEN 'pending' THEN 0 ELSE 1 END, l.created_at DESC LIMIT 500").all();
+        return json({ success: true, requests: rows.results || [] }, 200, cors);
+      }
+
+      if (url.pathname === "/api/admin/leaves/review" && request.method === "POST") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);
+        const data = await body();
+        const id = Number(data?.id), status = data?.status;
+        if (!Number.isInteger(id) || id < 1 || !["approved", "rejected"].includes(status)) return json({ success: false, message: "ข้อมูลพิจารณาคำขอไม่ถูกต้อง" }, 400, cors);
+        const result = await env.DB.prepare("UPDATE leave_requests SET status = ?, reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ? AND status = 'pending'").bind(status, user.id, id).run();
+        if (!result.meta?.changes) return json({ success: false, message: "ไม่พบคำขอที่รอพิจารณา หรือคำขอนี้ได้รับการพิจารณาแล้ว" }, 409, cors);
+        await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "leave_" + status, "leave_request_id=" + id).run();
+        return json({ success: true, message: status === "approved" ? "อนุมัติคำขอแล้ว" : "ปฏิเสธคำขอแล้ว" }, 200, cors);
+      }
+
       if (url.pathname === "/api/admin/personnel" && request.method === "GET") {
         const user = await readToken(request, env);
         if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);

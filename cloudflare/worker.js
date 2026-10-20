@@ -100,8 +100,39 @@ export default {
       cors.Vary = "Origin";
     }
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
-    if (!url.pathname.startsWith("/api/") && url.pathname !== "/") return json({ success: false, message: "ไม่พบเส้นทางที่ร้องขอ" }, 404, cors);
+    if (!url.pathname.startsWith("/api/") && !["/", "/webhook", "/test-send"].includes(url.pathname)) return json({ success: false, message: "ไม่พบเส้นทางที่ร้องขอ" }, 404, cors);
     if (url.pathname === "/" && request.method === "GET") return new Response("School Attendance API is running.", { headers: cors });
+
+    // Preserve the existing LINE webhook when this API is eventually deployed.
+    if (url.pathname === "/webhook" && request.method === "POST") {
+      if (!env.LINE_CHANNEL_SECRET) return new Response("LINE webhook is not configured", { status: 503, headers: cors });
+      const rawBody = await request.text();
+      const supplied = request.headers.get("x-line-signature") || "";
+      const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.LINE_CHANNEL_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+      const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody)));
+      const expected = base64(digest);
+      if (!supplied || !equalBytes(new TextEncoder().encode(supplied), new TextEncoder().encode(expected))) return new Response("Invalid signature", { status: 401, headers: cors });
+      // Keep webhook acknowledgement behavior; event automation can be added separately.
+      return new Response("OK", { status: 200, headers: cors });
+    }
+
+    if (url.pathname === "/test-send" && request.method === "POST") {
+      if (!env.ADMIN_TEST_KEY || request.headers.get("x-admin-test-key") !== env.ADMIN_TEST_KEY) return json({ success: false, message: "ไม่มีสิทธิ์ทดสอบ LINE" }, 401, cors);
+      if (!env.LINE_CHANNEL_ACCESS_TOKEN || !env.LINE_GROUP_ID) return json({ success: false, message: "ยังไม่ได้ตั้งค่า LINE_CHANNEL_ACCESS_TOKEN หรือ LINE_GROUP_ID" }, 503, cors);
+      const response = await fetch("https://api.line.me/v2/bot/message/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + env.LINE_CHANNEL_ACCESS_TOKEN },
+        body: JSON.stringify({ to: env.LINE_GROUP_ID, messages: [{ type: "text", text: "ทดสอบการแจ้งเตือนจากระบบลงชื่อเข้า-ออกงาน" }] })
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        console.error("LINE test-send failed", response.status, detail.slice(0, 300));
+        return json({ success: false, message: "LINE ส่งข้อความไม่สำเร็จ (" + response.status + ")" }, 502, cors);
+      }
+      return json({ success: true, message: "ส่งข้อความทดสอบไปยัง LINE Group แล้ว" }, 200, cors);
+    }
+
+    if (url.pathname === "/webhook" || url.pathname === "/test-send") return json({ success: false, message: "Method not allowed" }, 405, cors);
     if (!env.DB) return json({ success: false, message: "ยังไม่ได้เชื่อมต่อฐานข้อมูล" }, 500, cors);
     if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) return json({ success: false, message: "ระบบยังไม่ได้ตั้งค่า JWT_SECRET" }, 503, cors);
 

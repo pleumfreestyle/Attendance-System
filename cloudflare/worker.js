@@ -153,9 +153,10 @@ export default {
       if (url.pathname === "/api/work-location" && request.method === "GET") {
         const user = await readToken(request, env);
         if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
-        const location = await env.DB.prepare("SELECT id, name, latitude, longitude, radius_meters FROM work_locations WHERE is_active = 1 ORDER BY id LIMIT 1").first();
-        if (!location) return json({ success: false, message: "ยังไม่ได้ตั้งค่าสถานที่ทำงาน" }, 503, cors);
-        return json({ success: true, location }, 200, cors);
+        const rows = await env.DB.prepare("SELECT id, name, latitude, longitude, radius_meters FROM work_locations WHERE is_active = 1 ORDER BY id").all();
+        const locations = rows.results || [];
+        if (!locations.length) return json({ success: false, message: "ยังไม่ได้ตั้งค่าสถานที่ทำงาน" }, 503, cors);
+        return json({ success: true, locations }, 200, cors);
       }
 
       if (url.pathname === "/api/attendance" && request.method === "GET") {
@@ -176,10 +177,17 @@ export default {
         const lat = Number(data.latitude), lng = Number(data.longitude), accuracy = Number(data.accuracy);
         if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return json({ success: false, message: "พิกัด GPS ไม่ถูกต้อง" }, 400, cors);
         if (!Number.isFinite(accuracy) || accuracy < 0 || accuracy > 100) return json({ success: false, message: "ความแม่นยำ GPS ต่ำเกินไป กรุณาลองใหม่ในพื้นที่เปิดโล่ง" }, 400, cors);
-        const location = await env.DB.prepare("SELECT id, name, latitude, longitude, radius_meters FROM work_locations WHERE is_active = 1 ORDER BY id LIMIT 1").first();
-        if (!location) return json({ success: false, message: "ยังไม่ได้ตั้งค่าสถานที่ทำงาน" }, 503, cors);
-        const distance = distanceMeters(lat, lng, location.latitude, location.longitude);
-        if (distance > location.radius_meters) return json({ success: false, message: "อยู่นอกพื้นที่ปฏิบัติงาน", distance: Math.round(distance), radius: location.radius_meters }, 403, cors);
+        const locationRows = await env.DB.prepare("SELECT id, name, latitude, longitude, radius_meters FROM work_locations WHERE is_active = 1 ORDER BY id").all();
+        const locations = locationRows.results || [];
+        if (!locations.length) return json({ success: false, message: "ยังไม่ได้ตั้งค่าสถานที่ทำงาน" }, 503, cors);
+        const matches = locations.map(location => ({ location, distance: distanceMeters(lat, lng, location.latitude, location.longitude) }))
+          .filter(item => item.distance <= item.location.radius_meters)
+          .sort((a, b) => a.distance - b.distance);
+        if (!matches.length) {
+          const nearest = locations.map(location => ({ location, distance: distanceMeters(lat, lng, location.latitude, location.longitude) })).sort((a, b) => a.distance - b.distance)[0];
+          return json({ success: false, message: "อยู่นอกพื้นที่ปฏิบัติงาน", distance: Math.round(nearest.distance), radius: nearest.location.radius_meters }, 403, cors);
+        }
+        const { location, distance } = matches[0];
         const day = thaiDate();
         const today = await env.DB.prepare("SELECT id, attendance_type, recorded_at FROM attendance_records WHERE personnel_id = ? AND date(recorded_at, '+7 hours') = ? ORDER BY recorded_at ASC").bind(user.id, day).all();
         const records = today.results || [];
@@ -256,6 +264,22 @@ export default {
         const result = await env.DB.prepare("INSERT INTO shifts (name, start_time, end_time, grace_minutes, is_active) VALUES (?, ?, ?, ?, 1)").bind(name, start, end, grace).run();
         await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "shift_created", "shift_id=" + result.meta?.last_row_id + "; name=" + name).run();
         return json({ success: true, message: "เพิ่มกะทำงานแล้ว", id: result.meta?.last_row_id }, 201, cors);
+      }
+
+      if (url.pathname === "/api/leave-requests" && request.method === "POST") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        const data = await body();
+        const leaveType = String(data?.leaveType || "").trim();
+        const startDate = String(data?.startDate || "");
+        const endDate = String(data?.endDate || "");
+        const reason = String(data?.reason || "").trim();
+        if (!leaveType || leaveType.length > 80 || !/^\\d{4}-\\d{2}-\\d{2}$/.test(startDate) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(endDate) || endDate < startDate || reason.length > 1000) {
+          return json({ success: false, message: "กรุณาตรวจสอบประเภทลา วันที่ และเหตุผล" }, 400, cors);
+        }
+        const result = await env.DB.prepare("INSERT INTO leave_requests (personnel_id, leave_type, start_date, end_date, reason) VALUES (?, ?, ?, ?, ?)").bind(user.id, leaveType, startDate, endDate, reason || null).run();
+        await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "leave_request_submitted", "leave_request_id=" + result.meta?.last_row_id).run();
+        return json({ success: true, message: "ส่งคำขอลาแล้ว", id: result.meta?.last_row_id }, 201, cors);
       }
 
       if (url.pathname === "/api/admin/leaves" && request.method === "GET") {

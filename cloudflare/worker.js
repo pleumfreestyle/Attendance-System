@@ -311,6 +311,20 @@ export default {
         return json({ success: true, personnel: rows.results || [] }, 200, cors);
       }
 
+      if (url.pathname === "/api/admin/personnel/role" && request.method === "POST") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);
+        const data = await body();
+        const id = Number(data?.id), role = data?.role;
+        if (!Number.isInteger(id) || id < 1 || !["staff", "supervisor", "admin"].includes(role)) return json({ success: false, message: "บทบาทที่เลือกไม่ถูกต้อง" }, 400, cors);
+        if (id === Number(user.id) && role !== "admin") return json({ success: false, message: "ไม่สามารถลดสิทธิ์บัญชีที่กำลังใช้งานอยู่ได้" }, 400, cors);
+        const result = await env.DB.prepare("UPDATE personnel SET role = ? WHERE id = ?").bind(role, id).run();
+        if (!result.meta?.changes) return json({ success: false, message: "ไม่พบบัญชีบุคลากร" }, 404, cors);
+        await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "personnel_role_changed", "personnel_id=" + id + "; role=" + role).run();
+        return json({ success: true, message: "ปรับบทบาทบัญชีแล้ว" }, 200, cors);
+      }
+
       if (url.pathname === "/api/admin/approve" && request.method === "POST") {
         const user = await readToken(request, env);
         if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);

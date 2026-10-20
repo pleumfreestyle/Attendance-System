@@ -207,16 +207,51 @@ async function page_attendance(u){
  try{const d=await apiFetch('/api/work-location');locations=d.locations||[];if(!locations.length)throw Error('ยังไม่มีสถานที่ทำงานที่เปิดใช้งาน กรุณาติดต่อแอดมิน');$('wp').textContent=locations.map(l=>l.name+' · รัศมี '+l.radius_meters+' เมตร').join(' / ');if(map){locations.forEach(l=>{L.marker([l.latitude,l.longitude]).addTo(map).bindPopup(l.name);L.circle([l.latitude,l.longitude],{radius:l.radius_meters}).addTo(map)});if(locations.length===1)map.setView([locations[0].latitude,locations[0].longitude],15)}await refreshStatus();readGPS()}catch(e){message(e.message);$('wp').textContent=e.message}
 }
 
-// Generic page: real profile (read-only) and notifications; other pages are labeled placeholders.
-
-// แสดงหน้าโปรไฟล์/แจ้งเตือนจริงบางส่วน; หน้าอื่นเป็นโครงรอพัฒนาต่อ
-function page_stub(u){const c=document.getElementById('content'),p=PAGE.key;c.append(h('h1',null,PAGE.title));
-  if(p==='profile'){c.append(table(['ข้อมูล','ค่า'],[['รหัสพนักงาน',u.id],['ชื่อ',u.name],['อีเมล',u.email],['แผนก',u.dept],['ตำแหน่ง',u.position],['บทบาท',u.role],['สถานะบัญชี','ใช้งานอยู่']]))}
-  else if(p==='notifications'){const box=h('div','card');c.append(box);const draw=()=>{const all=getNotifications(),mine=all.filter(n=>n.userId===u.id);box.replaceChildren();
-    const b=h('button','btn','อ่านทั้งหมด');b.onclick=()=>{mine.forEach(n=>n.read=true);saveNotifications(all);draw()};box.append(b);
-    if(!mine.length)box.append(h('p','msg','ไม่มีการแจ้งเตือน'));mine.forEach(n=>{const r=h('p',null,`${n.read?'':'● '}${n.text} — ${fmtDate(n.at)}`);if(!n.read){const m=h('button','btn','อ่านแล้ว');m.onclick=()=>{n.read=true;saveNotifications(all);draw()};r.append(' ',m)}box.append(r)})};draw()}
-  else{const m=h('div','card');m.append(h('p','msg','หน้านี้ยังไม่มีข้อมูลหรือไม่รองรับการดำเนินการที่ร้องขอ'));const a=h('a','btn','กลับหน้าหลัก');a.href='#/dashboard';m.append(a);c.append(m)}}
-
+// หน้าข้อมูลบัญชี ประวัติลา สรุปเวลา การแจ้งเตือน และรายงาน อ่านจาก API จริง
+async function page_stub(u){
+ const c=document.getElementById('content'),p=PAGE.key;c.append(h('h1',null,PAGE.title));
+ const dateKey=value=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
+ const timeText=value=>value?new Date(value).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}):'—';
+ if(p==='profile'){
+  const card=adminCard('ข้อมูลบัญชี','ข้อมูลที่อ่านจากบัญชีผู้ใช้งานในระบบ');c.append(card);
+  try{const d=await apiFetch('/api/me'),x=d.user;card.append(table(['ข้อมูล','ค่า'],[['รหัสบุคลากร',x.staff_code],['ชื่อ-นามสกุล',x.full_name],['อีเมล',x.email||'—'],['ตำแหน่ง',x.position],['บทบาท',x.role],['สถานะบัญชี',x.is_active?'ใช้งาน':'ระงับ']]));
+   const form=h('form','form-grid'),old=adminInput('รหัสผ่านปัจจุบัน','profile-old','password'),nw=adminInput('รหัสผ่านใหม่ (8–128 ตัวอักษร)','profile-new','password'),cf=adminInput('ยืนยันรหัสผ่านใหม่','profile-confirm','password');
+   [old,nw,cf].forEach(x=>{x.input.required=true;x.wrap.style.marginBottom='10px';form.append(x.wrap)});const b=h('button','btn g','เปลี่ยนรหัสผ่าน');b.type='submit';form.append(b);card.append(h('h3',null,'เปลี่ยนรหัสผ่าน'),form);
+   form.onsubmit=async e=>{e.preventDefault();if(nw.input.value!==cf.input.value)return toast('รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน','err');b.disabled=true;try{const r=await apiFetch('/api/me/password',{method:'POST',body:JSON.stringify({currentPassword:old.input.value,newPassword:nw.input.value})});toast(r.message+' กรุณาเข้าสู่ระบบใหม่');setCurrentUser(null);location.hash='#/login'}catch(err){toast(err.message,'err')}finally{b.disabled=false}}
+  }catch(err){adminMessage(card,err.message,'err')}return;
+ }
+ if(p==='notifications'){
+  const card=adminCard('กิจกรรมและสถานะจากระบบ','แสดงคำขอลาและรายการลงเวลาที่บันทึกจริง');c.append(card);
+  try{const [l,a]=await Promise.all([apiFetch('/api/leave-requests'),apiFetch('/api/attendance')]);const items=[];
+   (l.requests||[]).forEach(x=>items.push({at:x.reviewed_at||x.created_at,text:'คำขอ'+x.leave_type+' ('+x.start_date+' ถึง '+x.end_date+') — '+({pending:'รอพิจารณา',approved:'อนุมัติแล้ว',rejected:'ไม่อนุมัติ'}[x.status]||x.status)}));
+   (a.records||[]).slice(0,20).forEach(x=>items.push({at:x.recorded_at,text:(x.attendance_type==='check_in'?'ลงเวลาเข้างาน':'ลงเวลาออกงาน')+' เวลา '+timeText(x.recorded_at)}));
+   items.sort((x,y)=>new Date(y.at)-new Date(x.at));card.append(table(['วันและเวลา','รายการ'],items.map(x=>[x.at?new Date(x.at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}):'—',x.text]),'ยังไม่มีรายการ'));
+  }catch(err){adminMessage(card,err.message,'err')}return;
+ }
+ if(p==='leave'){
+  const card=adminCard('ประวัติการลา','รายการคำขอลาที่ส่งจากบัญชีนี้');c.append(card);
+  try{const d=await apiFetch('/api/leave-requests');card.append(table(['ประเภท','วันที่เริ่ม','วันที่สิ้นสุด','เหตุผล','สถานะ'],(d.requests||[]).map(x=>[x.leave_type,x.start_date,x.end_date,x.reason||'—',({pending:'รอพิจารณา',approved:'อนุมัติแล้ว',rejected:'ไม่อนุมัติ'}[x.status]||x.status)]),'ยังไม่มีประวัติการลา'))}catch(err){adminMessage(card,err.message,'err')}return;
+ }
+ if(p==='absence'||p==='work-summary'){
+  const card=adminCard(PAGE.title,'คำนวณจากรายการลงเวลาจริงที่มีอยู่ในฐานข้อมูล');c.append(card);
+  try{const d=await apiFetch('/api/attendance'),groups=new Map();(d.records||[]).forEach(r=>{const k=dateKey(r.recorded_at);if(!groups.has(k))groups.set(k,{day:k,ci:null,co:null});const g=groups.get(k);if(r.attendance_type==='check_in'&&!g.ci)g.ci=r;if(r.attendance_type==='check_out'&&!g.co)g.co=r});
+   const rows=[...groups.values()].sort((a,b)=>b.day.localeCompare(a.day)).map(g=>{const mins=g.ci&&g.co?Math.max(0,Math.round((new Date(g.co.recorded_at)-new Date(g.ci.recorded_at))/60000)):null;return[g.day,g.ci?timeText(g.ci.recorded_at):'ไม่มีเวลาเข้า',g.co?timeText(g.co.recorded_at):'ไม่มีเวลาออก',mins===null?'—':Math.floor(mins/60)+' ชม. '+mins%60+' นาที',!g.ci?'ข้อมูลไม่ครบ':!g.co?'ยังไม่ลงเวลาออก':'มีรายการลงเวลาครบ']});
+   card.append(table(['วันที่','เวลาเข้า','เวลาออก','เวลาระหว่างเข้า–ออก','สถานะ'],p==='absence'?rows.filter(r=>r[4]!=='มีรายการลงเวลาครบ'):rows,'ไม่มีข้อมูล'));
+  }catch(err){adminMessage(card,err.message,'err')}return;
+ }
+ if(p==='admin-settings'){
+  const card=adminCard('ตั้งค่าบัญชีผู้ดูแล','เปลี่ยนรหัสผ่านของบัญชีที่กำลังใช้งาน');c.append(card);
+  const form=h('form','form-grid'),old=adminInput('รหัสผ่านปัจจุบัน','settings-old','password'),nw=adminInput('รหัสผ่านใหม่','settings-new','password'),cf=adminInput('ยืนยันรหัสผ่านใหม่','settings-confirm','password');
+  [old,nw,cf].forEach(x=>{x.input.required=true;x.wrap.style.marginBottom='10px';form.append(x.wrap)});const b=h('button','btn g','บันทึกรหัสผ่าน');b.type='submit';form.append(b);card.append(form);
+  form.onsubmit=async e=>{e.preventDefault();if(nw.input.value!==cf.input.value)return toast('รหัสผ่านใหม่ไม่ตรงกัน','err');b.disabled=true;try{const d=await apiFetch('/api/me/password',{method:'POST',body:JSON.stringify({currentPassword:old.input.value,newPassword:nw.input.value})});toast(d.message+' กรุณาเข้าสู่ระบบใหม่');setCurrentUser(null);location.hash='#/login'}catch(err){toast(err.message,'err')}finally{b.disabled=false}};return;
+ }
+ if(p==='admin-reports'){
+  const card=adminCard('รายงานการลงเวลา','ส่งออกข้อมูลจากฐานข้อมูลเป็นไฟล์ CSV เพื่อเปิดใน Excel');c.append(card);
+  const from=adminInput('ตั้งแต่วันที่','report-from','date'),to=adminInput('ถึงวันที่','report-to','date'),row=h('div','row');row.append(from.wrap,to.wrap);card.append(row);
+  card.append(adminButton('ส่งออก CSV',async()=>{try{if(from.input.value&&to.input.value&&from.input.value>to.input.value)return toast('วันที่เริ่มต้องไม่หลังวันที่สิ้นสุด','err');const d=await apiFetch('/api/attendance'),records=(d.records||[]).filter(x=>{const day=dateKey(x.recorded_at);return(!from.input.value||day>=from.input.value)&&(!to.input.value||day<=to.input.value)});const csv=[['รหัสบุคลากร','ชื่อ','ประเภท','วันเวลา','ละติจูด','ลองจิจูด','หมายเหตุ'],...records.map(x=>[x.staff_code||x.personnel_id,x.full_name||'',x.attendance_type,x.recorded_at,x.latitude??'',x.longitude??'',x.note||''])].map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\\r\\n');const blob=new Blob(['\\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=h('a');a.href=url;a.download='attendance-report.csv';a.click();URL.revokeObjectURL(url);toast('สร้างไฟล์รายงานแล้ว')}catch(err){toast(err.message,'err')}}));return;
+ }
+ const m=h('div','card');m.append(h('p','msg','ไม่พบฟังก์ชันของหน้านี้'));m.append(link('#/dashboard','กลับหน้าหลัก'));c.append(m);
+}
 
 async function page_leave_request(u){
  const c=document.getElementById('content'),card=h('section','card');card.append(h('h2',null,'ยื่นคำขอลา'),h('p','msg','คำขอจะถูกบันทึกลงฐานข้อมูลและส่งให้แอดมินพิจารณา'));c.append(card);
@@ -237,7 +272,11 @@ async function page_admin_reset_requests(){
  async function load(){card.replaceChildren(h('h2',null,'คำขอรีเซ็ตรหัสผ่าน'),h('p','msg','กำลังโหลด...'));try{const d=await apiFetch('/api/admin/password-reset-requests');card.replaceChildren(h('h2',null,'คำขอรีเซ็ตรหัสผ่าน'));const rows=(d.requests||[]).map(x=>[x.email,x.requested_at,x.status==='pending'?'รอดำเนินการ':x.status==='completed'?'ดำเนินการแล้ว':'ปฏิเสธ',x.status==='pending'?adminButton('ออก temporary password',async()=>{if(!confirm('ยืนยันว่าตรวจสอบตัวตนผู้ขอแล้ว และต้องการออก temporary password?'))return;try{const r=await apiFetch('/api/admin/password-reset',{method:'POST',body:JSON.stringify({id:x.id})});alert('รหัสผ่านชั่วคราว (แสดงครั้งเดียว):\\n\\n'+r.temporaryPassword+'\\n\\nส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้ และแนะนำให้เปลี่ยนทันที');await load()}catch(err){toast(err.message,'err')}},'btn g'):'—']);card.append(table(['อีเมล','วันที่ขอ','สถานะ','ดำเนินการ'],rows,'ไม่มีคำขอ'))}catch(err){card.replaceChildren();adminMessage(card,err.message,'err')}}await load();
 }
 
-/* ===== ADMIN PAGES: ใช้งาน Cloudflare API จริง ===== */
+async function page_admin_reset_requests(){
+ const c=document.getElementById('content'),card=adminCard('คำขอรีเซ็ตรหัสผ่าน','ตรวจสอบคำขอและสร้างรหัสผ่านชั่วคราว ต้องส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้');c.append(card);
+ async function load(){card.replaceChildren(h('h2',null,'คำขอรีเซ็ตรหัสผ่าน'),h('p','msg','กำลังโหลด...'));try{const d=await apiFetch('/api/admin/password-reset-requests');card.replaceChildren(h('h2',null,'คำขอรีเซ็ตรหัสผ่าน'));const rows=(d.requests||[]).map(x=>[x.email,x.requested_at,x.status==='pending'?'รอดำเนินการ':x.status==='completed'?'ดำเนินการแล้ว':'ปฏิเสธ',x.status==='pending'?adminButton('ออก temporary password',async()=>{if(!confirm('ยืนยันว่าตรวจสอบตัวตนผู้ขอแล้ว และต้องการออกรหัสผ่านชั่วคราว?'))return;try{const r=await apiFetch('/api/admin/password-reset',{method:'POST',body:JSON.stringify({id:x.id})});alert('รหัสผ่านชั่วคราว (แสดงครั้งเดียว):\\n\\n'+r.temporaryPassword+'\\n\\nส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้');await load()}catch(err){toast(err.message,'err')}},'btn g'):'—']);card.append(table(['อีเมล','วันที่ขอ','สถานะ','ดำเนินการ'],rows,'ไม่มีคำขอ'))}catch(err){card.replaceChildren();adminMessage(card,err.message,'err')}}await load();
+}
+\n/* ===== ADMIN PAGES: ใช้งาน Cloudflare API จริง ===== */
 function adminCard(title,description){const c=h('section','card');c.append(h('h2',null,title));if(description)c.append(h('p','msg',description));return c}
 function adminButton(label,fn,cls='btn'){const b=h('button',cls,label);b.type='button';b.onclick=fn;return b}
 function adminInput(labelText,id,type='text',value=''){const w=h('div');const l=h('label',null,labelText);l.htmlFor=id;const i=h('input');i.id=id;i.type=type;i.value=value;w.append(l,i);return {wrap:w,input:i}}

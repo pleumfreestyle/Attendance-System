@@ -140,7 +140,8 @@ export default {
         if (!user || !(await verifyPassword(password, user.password_hash))) return json({ success: false, message: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }, 401, cors);
         if (!user.is_active) return json({ success: false, message: "บัญชียังไม่ได้รับอนุมัติหรือถูกระงับ กรุณาติดต่อผู้ดูแล" }, 403, cors);
         const token = await issueToken(user, env.JWT_SECRET);
-        delete user.password_hash;\n        delete user.token_version;
+        delete user.password_hash;
+        delete user.token_version;
         return json({ success: true, token, expiresIn: TOKEN_TTL_SECONDS, user }, 200, cors);
       }
 

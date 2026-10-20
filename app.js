@@ -357,7 +357,8 @@ async function page_admin_attendance(){
 const ADM=['admin'],SUP=['supervisor','admin'];
 const ROUTES={login:{title:'เข้าสู่ระบบ',fn:page_login,pub:1},'forgot-password':{title:'ลืมรหัสผ่าน',fn:page_forgot,pub:1},
  dashboard:{title:'หน้าหลัก',fn:page_dashboard},attendance:{title:'ลงเวลาเข้า-ออกงาน',fn:page_attendance},'attendance-history':{title:'ประวัติการลงเวลา',fn:page_history}};
-[['absence','ขาดงาน/มาสาย'],['leave','ประวัติการลา'],['work-summary','สรุปเวลาทำงาน'],['notifications','การแจ้งเตือน'],['profile','โปรไฟล์']].forEach(([k,t])=>ROUTES[k]={title:t,fn:page_stub});\nROUTES['leave-request']={title:'ยื่นคำขอลา',fn:page_leave_request};
+[['absence','ขาดงาน/มาสาย'],['leave','ประวัติการลา'],['work-summary','สรุปเวลาทำงาน'],['notifications','การแจ้งเตือน'],['profile','โปรไฟล์']].forEach(([k,t])=>ROUTES[k]={title:t,fn:page_stub});
+ROUTES['leave-request']={title:'ยื่นคำขอลา',fn:page_leave_request};
 [['admin-users','จัดการบุคลากร',page_admin_users],['admin-location','จัดการสถานที่ทำงาน',page_admin_location],['admin-shifts','จัดการเวลาทำงานและกะ',page_admin_shifts],['admin-attendance','ตรวจสอบการลงเวลา',page_admin_attendance],['admin-reports','รายงาน',page_admin_attendance],['admin-settings','ตั้งค่าระบบ',page_stub]].forEach(([k,t,fn])=>ROUTES[k]={title:t,fn,roles:ADM});
 ROUTES['admin-leaves']={title:'จัดการคำขอลา',fn:page_admin_leaves,roles:ADM};
 ROUTES.register={title:'สมัครสมาชิก',fn:page_register,pub:1};

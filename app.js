@@ -39,9 +39,12 @@ function seed(){
 }
 // ตรวจว่ามีข้อมูลเริ่มต้นแล้วหรือยัง; ถ้ายังให้สร้างข้อมูลเดโม
 function ensureSeed(){ensureLeaves();if(!rd('seeded',false)){const s=seed();for(const k in s)wr(k,s[k]);wr('seeded',true)}}
+const API_BASE='https://school-attendance-api.projectcsemn.workers.dev';
 const getUsers=()=>rd('users',[]);
-const getCurrentUser=()=>{const id=rd('session',null);return getUsers().find(u=>u.id===id&&u.active)||null};
-const setCurrentUser=u=>{try{u?wr('session',u.id):localStorage.removeItem(K+'session')}catch{}};
+const getCurrentUser=()=>{try{const raw=sessionStorage.getItem('attendance_user');return raw?JSON.parse(raw):null}catch{return null}};
+const setCurrentUser=u=>{try{if(u)sessionStorage.setItem('attendance_user',JSON.stringify(u));else{sessionStorage.removeItem('attendance_user');sessionStorage.removeItem('attendance_token')}}catch{}};
+async function apiFetch(path,options={}){const token=sessionStorage.getItem('attendance_token');const headers={'Content-Type':'application/json',...(options.headers||{})};if(token)headers.Authorization='Bearer '+token;const response=await fetch(API_BASE+path,{...options,headers});let data={};try{data=await response.json()}catch{}if(!response.ok||data.success===false)throw new Error(data.message||'คำขอไม่สำเร็จ ('+response.status+')');return data}
+function normalizeUser(raw){return{id:String(raw.id),name:raw.full_name||raw.name||'',email:raw.email||'',role:raw.role==='admin'?'admin':raw.role==='supervisor'?'supervisor':'employee',active:!!(raw.is_active??raw.active),staffCode:raw.staff_code||'',position:raw.position||''}}
 const getAttendanceRecords=()=>rd('records',[]);
 const saveAttendanceRecord=r=>{const a=getAttendanceRecords().filter(x=>x.id!==r.id);a.push(r);return wr('records',a)};
 const getShifts=()=>rd('shifts',[]);
@@ -79,8 +82,7 @@ function table(head,rows,empty='ไม่พบข้อมูล'){const w=h('d
 // FRONTEND-ONLY DEMO AUTH. Plain-text passwords in localStorage are NOT secure; real auth must be server-side.
 
 // ตรวจสอบบัญชีในข้อมูลเดโมและบันทึก session ปัจจุบัน
-function login(email,pw){ensureSeed();const u=getUsers().find(x=>x.email===email.trim().toLowerCase());
-  if(!u||u.password!==pw)return{error:'อีเมลหรือรหัสผ่านไม่ถูกต้อง'};if(!u.active)return{error:'บัญชีนี้ถูกระงับ'};setCurrentUser(u);return{user:u}}
+async function login(email,pw){try{const data=await apiFetch('/api/login',{method:'POST',body:JSON.stringify({email:email.trim().toLowerCase(),password:pw})});sessionStorage.setItem('attendance_token',data.token);const user=normalizeUser(data.user);setCurrentUser(user);return{user}}catch(error){return{error:error.message||'เข้าสู่ระบบไม่สำเร็จ'}}}
 // ออกจากระบบและกลับไปหน้า Login
 function logout(){setCurrentUser(null);location.href='#/login'}
 // ตรวจว่ามีผู้ใช้ล็อกอินและมีบทบาทตามที่หน้าต้องการหรือไม่
@@ -168,7 +170,7 @@ function page_login(){
     const originalText=b?b.textContent:'เข้าสู่ระบบ';
     if(b){b.disabled=true;b.textContent='กำลังเข้าสู่ระบบ...';}
     try{
-      const result=login(em,p);
+      const result=await login(em,p);
       if(result.error){
         err.textContent=result.error;
         return;

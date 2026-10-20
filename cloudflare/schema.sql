@@ -37,3 +37,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_one_type_per_day ON attendance_
 -- Ensure one account per email; confirm no duplicate non-empty emails before applying to any populated database.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_personnel_email_unique ON personnel(email COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_leave_personnel_status ON leave_requests(personnel_id, status);
+
+
+CREATE TABLE IF NOT EXISTS password_reset_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL COLLATE NOCASE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'rejected')),
+  requested_at TEXT NOT NULL DEFAULT (datetime('now')),
+  processed_by INTEGER,
+  processed_at TEXT,
+  FOREIGN KEY (processed_by) REFERENCES personnel(id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_password_reset_pending_email
+  ON password_reset_requests(email COLLATE NOCASE) WHERE status = 'pending';

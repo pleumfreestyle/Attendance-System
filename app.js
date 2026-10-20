@@ -17,51 +17,12 @@
 // ห้ามใช้ localStorage เป็นที่เก็บรหัสผ่านจริง และต้องตรวจสิทธิ์/ตำแหน่งบน backend
 // ============================================================
 
-// ===== 1. STORAGE & SEED: จัดเก็บข้อมูลและสร้างข้อมูลตัวอย่าง =====
-// localStorage layer. FRONTEND-ONLY DEMO: not secure storage.
-const K='att2_';
-const rd=(k,d)=>{try{const v=localStorage.getItem(K+k);return v?JSON.parse(v):d}catch{return d}};
-const wr=(k,v)=>{try{localStorage.setItem(K+k,JSON.stringify(v));return true}catch{return false}};
-// สร้างข้อมูลตัวอย่างเริ่มต้นสำหรับบัญชี กะทำงาน สถานที่ และประวัติลงเวลา
-function seed(){
-  const users=[
-   {id:'U001',name:'สมชาย ใจดี',email:'employee@example.com',password:'Employee123!',role:'employee',dept:'ฝ่ายบัญชี',position:'นักบัญชี',supervisorId:'U002',active:true},
-   {id:'U002',name:'สุดา รักงาน',email:'supervisor@example.com',password:'Supervisor123!',role:'supervisor',dept:'ฝ่ายบัญชี',position:'หัวหน้าฝ่าย',supervisorId:null,active:true},
-   {id:'U003',name:'ผู้ดูแล ระบบ',email:'admin@example.com',password:'Admin123!',role:'admin',dept:'ฝ่ายบุคคล',position:'เจ้าหน้าที่ HR',supervisorId:null,active:true}];
-  const recs=[];const now=new Date();
-  for(let i=1;i<=24;i++){const d=new Date(now);d.setDate(d.getDate()-i);if([0,6].includes(d.getDay()))continue;
-    const late=i%5===0;const ci=new Date(d);ci.setHours(8,late?50:10+(i*7)%15,0,0);const co=new Date(d);co.setHours(17,35,0,0);
-    recs.push({id:'A'+i,userId:'U001',date:d.toLocaleDateString('sv'),checkIn:ci.toISOString(),checkOut:co.toISOString(),shiftId:'S1',late,distance:120+i*9,accuracy:20});}
-  return{users,records:recs,
-   shifts:[{id:'S1',name:'กะเช้า',start:'08:30',end:'17:30',grace:15,overnight:false}],
-   location:{name:'สำนักงานตัวอย่าง (พิกัดตัวอย่าง)',lat:13.7563,lng:100.5018,radius:1000},
-   notifications:[{id:'N1',userId:'U001',text:'ยินดีต้อนรับสู่ระบบลงเวลา (ข้อมูลตัวอย่าง)',at:now.toISOString(),read:false,link:'#/dashboard'}],audit:[]};
-}
-// ตรวจว่ามีข้อมูลเริ่มต้นแล้วหรือยัง; ถ้ายังให้สร้างข้อมูลเดโม
-function ensureSeed(){ensureLeaves();if(!rd('seeded',false)){const s=seed();for(const k in s)wr(k,s[k]);wr('seeded',true)}}
+// ===== 1. API & SESSION =====
 const API_BASE='https://school-attendance-api.projectcsemn.workers.dev';
-const getUsers=()=>rd('users',[]);
 const getCurrentUser=()=>{try{const raw=sessionStorage.getItem('attendance_user');return raw?JSON.parse(raw):null}catch{return null}};
 const setCurrentUser=u=>{try{if(u)sessionStorage.setItem('attendance_user',JSON.stringify(u));else{sessionStorage.removeItem('attendance_user');sessionStorage.removeItem('attendance_token')}}catch{}};
 async function apiFetch(path,options={}){const token=sessionStorage.getItem('attendance_token');const headers={'Content-Type':'application/json',...(options.headers||{})};if(token)headers.Authorization='Bearer '+token;const response=await fetch(API_BASE+path,{...options,headers});let data={};try{data=await response.json()}catch{}if(!response.ok||data.success===false)throw new Error(data.message||'คำขอไม่สำเร็จ ('+response.status+')');return data}
 function normalizeUser(raw){return{id:String(raw.id),name:raw.full_name||raw.name||'',email:raw.email||'',role:raw.role==='admin'?'admin':raw.role==='supervisor'?'supervisor':'employee',active:!!(raw.is_active??raw.active),staffCode:raw.staff_code||'',position:raw.position||''}}
-const getAttendanceRecords=()=>rd('records',[]);
-const saveAttendanceRecord=r=>{const a=getAttendanceRecords().filter(x=>x.id!==r.id);a.push(r);return wr('records',a)};
-const getShifts=()=>rd('shifts',[]);
-const getWorkLocation=()=>rd('location',null);
-const saveWorkLocation=l=>wr('location',l);
-const getNotifications=()=>rd('notifications',[]);
-const saveNotifications=n=>wr('notifications',n);
-const getAuditLogs=()=>rd('audit',[]);
-// ล้างเฉพาะรายการ localStorage ที่ขึ้นต้นด้วย att2_ แล้วสร้างข้อมูลเดโมใหม่
-function resetDemoData(){try{const ks=[];for(let i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));ks.filter(k=>k&&k.startsWith(K)).forEach(k=>localStorage.removeItem(k))}catch{}ensureSeed()}
-// สร้างรายการลาตัวอย่างครั้งแรก ถ้ายังไม่มีข้อมูลการลา
-function ensureLeaves(){if(rd('leaves',null)!==null)return;const d=n=>{const x=new Date();x.setDate(x.getDate()+n);return x.toLocaleDateString('sv')};
-  wr('leaves',[{id:'L1',userId:'U001',type:'ลาพักร้อน',start:d(-20),end:d(-19),days:2,submitted:d(-25),status:'approved',approver:'สุดา รักงาน'},
-   {id:'L2',userId:'U001',type:'ลากิจ',start:d(7),end:d(7),days:1,submitted:d(-1),status:'pending_supervisor',approver:'-'}])}
-const getLeaves=()=>rd('leaves',[]);
-const saveLeaves=l=>wr('leaves',l);
-
 // ===== 2. UTILS: ฟังก์ชันช่วยใช้ซ้ำในหลายหน้า =====
 const fmtDate=s=>new Date(s).toLocaleDateString('th-TH-u-ca-buddhist',{day:'numeric',month:'short',year:'numeric'});
 const fmtTime=s=>s?new Date(s).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}):'-';
@@ -86,7 +47,7 @@ async function login(email,pw){try{const data=await apiFetch('/api/login',{metho
 // ออกจากระบบและกลับไปหน้า Login
 function logout(){setCurrentUser(null);location.href='#/login'}
 // ตรวจว่ามีผู้ใช้ล็อกอินและมีบทบาทตามที่หน้าต้องการหรือไม่
-function requireAuth(roles){ensureSeed();const u=getCurrentUser();if(!u){location.href='#/login';return null}
+function requireAuth(roles){const u=getCurrentUser();if(!u){location.href='#/login';return null}
   if(roles&&!roles.includes(u.role)){location.href='#/dashboard';return null}return u}
 
 const timers=[];const T=(f,ms)=>{timers.push(setInterval(f,ms))};let PAGE={key:'',title:''},LAY=null;
@@ -99,7 +60,7 @@ const ROLE={employee:'พนักงาน',supervisor:'หัวหน้า�
 // สร้างรายการเมนูที่เหมาะกับบทบาท employee / supervisor / admin
 function menuFor(role){
   const m=[['#/dashboard','🏠',role==='admin'?'Admin Dashboard':'Home'],['#/attendance','📍','ลงเวลาเข้า-ออกงาน'],['#/attendance-history','🕘','ประวัติการลงเวลา'],['#/absence','⚠️','ขาดงาน/มาสาย'],['#/leave-request','📝','ยื่นคำขอลา'],['#/leave','📅','ประวัติการลา'],['#/work-summary','📊','สรุปเวลาทำงาน'],['#/notifications','🔔','การแจ้งเตือน'],['#/profile','👤','โปรไฟล์']];
-  if(role==='supervisor')m.push(['#/admin-leaves','✅','รายการรออนุมัติ'],['#/admin-leaves?view=history','🗂️','ประวัติการอนุมัติ']);
+  
   if(role==='admin')m.push(['#/admin-users','👥','จัดการบุคลากร'],['#/admin-location','🗺️','จัดการสถานที่ทำงาน'],['#/admin-shifts','⏱️','จัดการเวลาทำงานและกะ'],['#/admin-attendance','🔍','ตรวจสอบการลงเวลา'],['#/admin-leaves','🧾','จัดการคำขอลา'],['#/admin-reports','📈','รายงาน'],['#/admin-settings','⚙️','ตั้งค่าระบบ'],['#/admin-password-resets','🔑','คำขอรีเซ็ตรหัสผ่าน']);
   return m}
 // สร้างโครงหน้าเว็บหลัก: Sidebar, Hamburger, Topbar, โปรไฟล์ และเนื้อหา
@@ -349,7 +310,7 @@ async function page_admin_shifts(){
  const c=document.getElementById('content'),card=adminCard('จัดการเวลาทำงานและกะ','กำหนดชื่อกะ เวลาเริ่ม–สิ้นสุด และเวลาผ่อนผัน');c.append(card);
  const form=h('form','row');const name=adminInput('ชื่อกะ','shift-name');const start=adminInput('เวลาเริ่ม','shift-start','time','08:30');const end=adminInput('เวลาสิ้นสุด','shift-end','time','17:30');const grace=adminInput('ผ่อนผัน (นาที)','shift-grace','number','15');[name,start,end,grace].forEach(x=>{x.input.required=true;form.append(x.wrap)});const save=h('button','btn g','เพิ่มกะ');save.type='submit';form.append(save);card.append(form);const out=adminCard('รายการกะทำงาน');c.append(out);
  form.onsubmit=async e=>{e.preventDefault();try{const d=await apiFetch('/api/admin/shifts',{method:'POST',body:JSON.stringify({name:name.input.value.trim(),startTime:start.input.value,endTime:end.input.value,graceMinutes:Number(grace.input.value)})});toast(d.message);load()}catch(err){toast(err.message,'err')}};
- async function load(){out.replaceChildren(h('h2',null,'รายการกะทำงาน'));try{const d=await apiFetch('/api/admin/shifts');out.append(table(['ชื่อกะ','เริ่ม','สิ้นสุด','ผ่อนผัน','สถานะ'],d.shifts.map(x=>[x.name,x.start_time,x.end_time,x.grace_minutes+' นาที',x.is_active?'ใช้งาน':'ปิดใช้งาน']),'ยังไม่มีกะทำงาน'))}catch(err){adminMessage(out,err.message,'err')}}await load()
+ async function load(){out.replaceChildren(h('h2',null,'รายการกะทำงาน'));try{const d=await apiFetch('/api/admin/shifts');out.append(table(['ชื่อกะ','เริ่ม','สิ้นสุด','ผ่อนผัน','สถานะ','จัดการ'],d.shifts.map(x=>[x.name,x.start_time,x.end_time,x.grace_minutes+' นาที',x.is_active?'ใช้งาน':'ปิดใช้งาน',adminButton(x.is_active?'ปิดกะ':'เปิดกะ',async()=>{try{const r=await apiFetch('/api/admin/shifts',{method:'PATCH',body:JSON.stringify({id:x.id,active:!x.is_active})});toast(r.message);load()}catch(err){toast(err.message,'err')}},'btn o')]),'ยังไม่มีกะทำงาน'))}catch(err){adminMessage(out,err.message,'err')}}await load()
 }
 async function page_admin_attendance(){
  const c=document.getElementById('content'),card=adminCard('ตรวจสอบการลงเวลา','รายการล่าสุดสูงสุด 500 รายการจากฐานข้อมูล');c.append(card);

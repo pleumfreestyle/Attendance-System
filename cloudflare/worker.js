@@ -42,7 +42,7 @@ async function readToken(request, env) {
     const payload = JSON.parse(new TextDecoder().decode(fromB64url(parts[1])));
     if (!payload.sub || !payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) return null;
     const user = await env.DB.prepare("SELECT id, staff_code, full_name, email, position, role, is_active, token_version FROM personnel WHERE id = ?").bind(payload.sub).first();
-    if (!user || !user.is_active) return null;
+    if (!user || !user.is_active || Number(payload.ver || 0) !== Number(user.token_version || 0)) return null;
     return user;
   } catch {
     return null;
@@ -140,7 +140,7 @@ export default {
         if (!user || !(await verifyPassword(password, user.password_hash))) return json({ success: false, message: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }, 401, cors);
         if (!user.is_active) return json({ success: false, message: "บัญชียังไม่ได้รับอนุมัติหรือถูกระงับ กรุณาติดต่อผู้ดูแล" }, 403, cors);
         const token = await issueToken(user, env.JWT_SECRET);
-        delete user.password_hash;
+        delete user.password_hash;\n        delete user.token_version;
         return json({ success: true, token, expiresIn: TOKEN_TTL_SECONDS, user }, 200, cors);
       }
 

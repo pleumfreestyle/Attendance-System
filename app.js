@@ -100,7 +100,7 @@ const ROLE={employee:'พนักงาน',supervisor:'หัวหน้า�
 function menuFor(role){
   const m=[['#/dashboard','🏠',role==='admin'?'Admin Dashboard':'Home'],['#/attendance','📍','ลงเวลาเข้า-ออกงาน'],['#/attendance-history','🕘','ประวัติการลงเวลา'],['#/absence','⚠️','ขาดงาน/มาสาย'],['#/leave-request','📝','ยื่นคำขอลา'],['#/leave','📅','ประวัติการลา'],['#/work-summary','📊','สรุปเวลาทำงาน'],['#/notifications','🔔','การแจ้งเตือน'],['#/profile','👤','โปรไฟล์']];
   if(role==='supervisor')m.push(['#/admin-leaves','✅','รายการรออนุมัติ'],['#/admin-leaves?view=history','🗂️','ประวัติการอนุมัติ']);
-  if(role==='admin')m.push(['#/admin-users','👥','จัดการบุคลากร'],['#/admin-location','🗺️','จัดการสถานที่ทำงาน'],['#/admin-shifts','⏱️','จัดการเวลาทำงานและกะ'],['#/admin-attendance','🔍','ตรวจสอบการลงเวลา'],['#/admin-leaves','🧾','จัดการคำขอลา'],['#/admin-reports','📈','รายงาน'],['#/admin-settings','⚙️','ตั้งค่าระบบ']);
+  if(role==='admin')m.push(['#/admin-users','👥','จัดการบุคลากร'],['#/admin-location','🗺️','จัดการสถานที่ทำงาน'],['#/admin-shifts','⏱️','จัดการเวลาทำงานและกะ'],['#/admin-attendance','🔍','ตรวจสอบการลงเวลา'],['#/admin-leaves','🧾','จัดการคำขอลา'],['#/admin-reports','📈','รายงาน'],['#/admin-settings','⚙️','ตั้งค่าระบบ'],['#/admin-password-resets','🔑','คำขอรีเซ็ตรหัสผ่าน']);
   return m}
 // สร้างโครงหน้าเว็บหลัก: Sidebar, Hamburger, Topbar, โปรไฟล์ และเนื้อหา
 function buildLayout(user){
@@ -146,12 +146,7 @@ function page_login(){
   // The reset button is optional on the login page; never let its absence
   // stop the login form from receiving its submit handler.
   const resetButton=document.getElementById('reset');
-  if(resetButton)resetButton.onclick=()=>{
-    if(confirm('รีเซ็ตข้อมูลตัวอย่างทั้งหมด?')){
-      resetDemoData();
-      toast('รีเซ็ตข้อมูลแล้ว');
-    }
-  };
+  if(resetButton)resetButton.remove();
 
   f.onsubmit=async e=>{
     e.preventDefault();
@@ -320,7 +315,8 @@ async function page_admin_reset_requests(){
  const c=document.getElementById('content'),card=adminCard('คำขอรีเซ็ตรหัสผ่าน','ตรวจสอบคำขอและสร้างรหัสผ่านชั่วคราว โดยต้องส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้');c.append(card);
  async function load(){card.replaceChildren(h('h2',null,'คำขอรีเซ็ตรหัสผ่าน'),h('p','msg','กำลังโหลด...'));try{const d=await apiFetch('/api/admin/password-reset-requests');card.replaceChildren(h('h2',null,'คำขอรีเซ็ตรหัสผ่าน'));const rows=(d.requests||[]).map(x=>[x.email,x.requested_at,x.status==='pending'?'รอดำเนินการ':x.status==='completed'?'ดำเนินการแล้ว':'ปฏิเสธ',x.status==='pending'?adminButton('ออก temporary password',async()=>{if(!confirm('ยืนยันว่าตรวจสอบตัวตนผู้ขอแล้ว และต้องการออก temporary password?'))return;try{const r=await apiFetch('/api/admin/password-reset',{method:'POST',body:JSON.stringify({id:x.id})});alert('รหัสผ่านชั่วคราว (แสดงครั้งเดียว):\\n\\n'+r.temporaryPassword+'\\n\\nส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้ และแนะนำให้เปลี่ยนทันที');await load()}catch(err){toast(err.message,'err')}},'btn g'):'—']);card.append(table(['อีเมล','วันที่ขอ','สถานะ','ดำเนินการ'],rows,'ไม่มีคำขอ'))}catch(err){card.replaceChildren();adminMessage(card,err.message,'err')}}await load();
 }
-\n/* ===== ADMIN PAGES: ใช้งาน Cloudflare API จริง ===== */
+
+/* ===== ADMIN PAGES: ใช้งาน Cloudflare API จริง ===== */
 function adminCard(title,description){const c=h('section','card');c.append(h('h2',null,title));if(description)c.append(h('p','msg',description));return c}
 function adminButton(label,fn,cls='btn'){const b=h('button',cls,label);b.type='button';b.onclick=fn;return b}
 function adminInput(labelText,id,type='text',value=''){const w=h('div');const l=h('label',null,labelText);l.htmlFor=id;const i=h('input');i.id=id;i.type=type;i.value=value;w.append(l,i);return {wrap:w,input:i}}

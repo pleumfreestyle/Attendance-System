@@ -1,6 +1,6 @@
 # Cloudflare Worker API (staged implementation)
 
-This folder contains a proposed API implementation. It is **not deployed by GitHub Pages** and should not replace the live Worker until migration and setup steps are completed and tested.
+This folder contains the proposed API implementation. It is **not deployed by GitHub Pages**. The additive D1 tables/indexes were applied to the connected `school-attendance-db` on 2026-10-20 after checking the existing personnel, attendance, and audit tables were empty. The live Worker has not been replaced.
 
 ## Components
 - `worker.js`: API source for registration, login, profile, attendance, work location, and admin approval.

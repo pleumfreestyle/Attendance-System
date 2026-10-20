@@ -144,6 +144,67 @@ export default {
         return json({ success: true, token, expiresIn: TOKEN_TTL_SECONDS, user }, 200, cors);
       }
 
+
+      if (url.pathname === "/api/me/password" && request.method === "POST") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบใหม่" }, 401, cors);
+        const data = await body();
+        const currentPassword = String(data?.currentPassword || "");
+        const newPassword = String(data?.newPassword || "");
+        const row = await env.DB.prepare("SELECT password_hash FROM personnel WHERE id = ?").bind(user.id).first();
+        if (!row || !(await verifyPassword(currentPassword, row.password_hash))) return json({ success: false, message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" }, 400, cors);
+        if (newPassword.length < 8 || newPassword.length > 128 || newPassword === currentPassword) return json({ success: false, message: "รหัสผ่านใหม่ต้องมี 8–128 ตัวอักษรและต้องต่างจากรหัสผ่านเดิม" }, 400, cors);
+        const iterations = 210000, salt = crypto.getRandomValues(new Uint8Array(16));
+        const hash = await passwordHash(newPassword, salt, iterations);
+        const stored = "pbkdf2$" + iterations + "$" + base64(salt) + "$" + base64(hash);
+        await env.DB.prepare("UPDATE personnel SET password_hash = ? WHERE id = ?").bind(stored, user.id).run();
+        await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "password_changed", "self_service").run();
+        return json({ success: true, message: "เปลี่ยนรหัสผ่านแล้ว" }, 200, cors);
+      }
+
+      if (url.pathname === "/api/password-reset-requests" && request.method === "POST") {
+        const data = await body();
+        const email = String(data?.email || "").trim().toLowerCase();
+        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254) return json({ success: false, message: "กรุณากรอกอีเมลให้ถูกต้อง" }, 400, cors);
+        const person = await env.DB.prepare("SELECT id FROM personnel WHERE email = ? COLLATE NOCASE").bind(email).first();
+        if (person) {
+          try { await env.DB.prepare("INSERT INTO password_reset_requests (email) VALUES (?)").bind(email).run(); }
+          catch (error) { if (!/UNIQUE constraint failed/i.test(String(error?.message))) throw error; }
+        }
+        return json({ success: true, message: "หากอีเมลนี้อยู่ในระบบ คำขอจะถูกส่งให้ผู้ดูแลตรวจสอบ โปรดติดต่อผู้ดูแลหากจำเป็น" }, 202, cors);
+      }
+
+      if (url.pathname === "/api/admin/password-reset-requests" && request.method === "GET") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);
+        const rows = await env.DB.prepare("SELECT id, email, status, requested_at, processed_at FROM password_reset_requests ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, requested_at DESC LIMIT 200").all();
+        return json({ success: true, requests: rows.results || [] }, 200, cors);
+      }
+
+      if (url.pathname === "/api/admin/password-reset" && request.method === "POST") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);
+        const data = await body(), id = Number(data?.id);
+        if (!Number.isInteger(id) || id < 1) return json({ success: false, message: "คำขอไม่ถูกต้อง" }, 400, cors);
+        const req = await env.DB.prepare("SELECT id, email, status FROM password_reset_requests WHERE id = ?").bind(id).first();
+        if (!req || req.status !== "pending") return json({ success: false, message: "ไม่พบคำขอที่รอจัดการ" }, 409, cors);
+        const person = await env.DB.prepare("SELECT id FROM personnel WHERE email = ? COLLATE NOCASE").bind(req.email).first();
+        if (!person) {
+          await env.DB.prepare("UPDATE password_reset_requests SET status = 'rejected', processed_by = ?, processed_at = datetime('now') WHERE id = ?").bind(user.id, id).run();
+          return json({ success: false, message: "ไม่พบบัญชีที่ใช้อีเมลนี้" }, 404, cors);
+        }
+        const tempPassword = b64url(crypto.getRandomValues(new Uint8Array(12))) + "aA7!";
+        const iterations = 210000, salt = crypto.getRandomValues(new Uint8Array(16));
+        const hash = await passwordHash(tempPassword, salt, iterations);
+        const stored = "pbkdf2$" + iterations + "$" + base64(salt) + "$" + base64(hash);
+        await env.DB.prepare("UPDATE personnel SET password_hash = ? WHERE id = ?").bind(stored, person.id).run();
+        await env.DB.prepare("UPDATE password_reset_requests SET status = 'completed', processed_by = ?, processed_at = datetime('now') WHERE id = ? AND status = 'pending'").bind(user.id, id).run();
+        await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "password_reset_admin", "request_id=" + id + "; personnel_id=" + person.id).run();
+        return json({ success: true, message: "ออก temporary password แล้ว โปรดส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้ และให้เปลี่ยนทันทีหลังเข้าสู่ระบบ", temporaryPassword: tempPassword }, 200, cors);
+      }
+
       if (url.pathname === "/api/me" && request.method === "GET") {
         const user = await readToken(request, env);
         if (!user) return json({ success: false, message: "เซสชันหมดอายุหรือไม่ถูกต้อง กรุณาเข้าสู่ระบบใหม่" }, 401, cors);
@@ -162,7 +223,7 @@ export default {
       if (url.pathname === "/api/attendance" && request.method === "GET") {
         const user = await readToken(request, env);
         if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
-        const isAdmin = user.role === "admin" || user.role === "supervisor";
+        const isAdmin = user.role === "admin";
         const rows = isAdmin
           ? await env.DB.prepare("SELECT a.id, a.personnel_id, p.full_name, p.staff_code, a.attendance_type, a.recorded_at, a.latitude, a.longitude, a.note FROM attendance_records a JOIN personnel p ON p.id = a.personnel_id ORDER BY a.recorded_at DESC LIMIT 500").all()
           : await env.DB.prepare("SELECT id, personnel_id, attendance_type, recorded_at, latitude, longitude, note FROM attendance_records WHERE personnel_id = ? ORDER BY recorded_at DESC LIMIT 100").bind(user.id).all();

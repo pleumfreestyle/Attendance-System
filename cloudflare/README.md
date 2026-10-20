@@ -7,13 +7,15 @@ This folder contains the proposed API implementation. It is **not deployed by Gi
 - `schema.sql`: additive D1 schema for work locations, shifts, leave requests, and indexes.
 
 ## Before deployment
-1. Back up the D1 database.
-2. Apply `schema.sql` to the existing `school-attendance-db`. This migration is additive; it does not delete existing tables or rows.
-3. Configure the Worker D1 binding named `DB`.
-4. Add a Cloudflare Worker secret named `JWT_SECRET` containing a cryptographically random value of at least 32 bytes. Do not commit it to GitHub or send it in chat.
-5. Add the real work location coordinates and approved radius. Do not use sample coordinates for production.
-6. Create the first admin account through a controlled one-time setup procedure. Public registration always creates an inactive `staff` account; users cannot choose their own role.
-7. Test login, pending-account rejection, admin-only approval, location rejection, duplicate check-in/out, CORS, and token expiry in staging before replacing the current Worker.
+
+1. Back up the D1 database before any further migration or account setup.
+2. The additive tables and indexes in `schema.sql` were applied to the connected `school-attendance-db` on 2026-10-20 after checking the existing personnel, attendance, and audit tables were empty.
+3. Confirm the Worker D1 binding is named `DB`.
+4. Add a Worker secret `JWT_SECRET` containing a cryptographically random value of at least 32 bytes. Never commit or share it.
+5. Configure the real work location coordinates and approved radius through the admin page; do not use sample coordinates in production.
+6. Create the first admin account through a controlled one-time setup procedure. Public registration creates an inactive `staff` account; users cannot choose their own role.
+7. Preserve and test the existing LINE `/webhook` and `/test-send` routes before deploying this Worker source, because the staged implementation does not yet include those legacy routes.
+8. Test login, pending-account rejection, admin-only approval, location rejection, duplicate check-in/out, CORS, and token expiry before replacing the current Worker.
 
 ## API routes
 - `POST /api/register` — creates a pending staff account; hashes password using PBKDF2-SHA-256.

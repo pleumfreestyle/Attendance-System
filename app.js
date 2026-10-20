@@ -285,13 +285,54 @@ function page_stub(u){const c=document.getElementById('content'),p=PAGE.key;c.ap
     if(!mine.length)box.append(h('p','msg','ไม่มีการแจ้งเตือน'));mine.forEach(n=>{const r=h('p',null,`${n.read?'':'● '}${n.text} — ${fmtDate(n.at)}`);if(!n.read){const m=h('button','btn','อ่านแล้ว');m.onclick=()=>{n.read=true;saveNotifications(all);draw()};r.append(' ',m)}box.append(r)})};draw()}
   else{const m=h('div','card');m.append(h('p','msg','ต้นแบบ: หน้านี้ยังไม่ได้พัฒนาฟังก์ชันในรอบนี้ (ลิงก์ใช้งานได้ ไม่มีหน้าเสีย)'));const a=h('a','btn','กลับหน้าหลัก');a.href='#/dashboard';m.append(a);c.append(m)}}
 
+
+/* ===== ADMIN PAGES: ใช้งาน Cloudflare API จริง ===== */
+function adminCard(title,description){const c=h('section','card');c.append(h('h2',null,title));if(description)c.append(h('p','msg',description));return c}
+function adminButton(label,fn,cls='btn'){const b=h('button',cls,label);b.type='button';b.onclick=fn;return b}
+function adminInput(labelText,id,type='text',value=''){const w=h('div');const l=h('label',null,labelText);l.htmlFor=id;const i=h('input');i.id=id;i.type=type;i.value=value;w.append(l,i);return {wrap:w,input:i}}
+function adminMessage(parent,text,kind=''){const p=h('p','msg '+kind,text);parent.append(p);return p}
+
+async function page_admin_location(){
+ const c=document.getElementById('content');const card=adminCard('จัดการสถานที่ทำงาน','ปักหมุดบนแผนที่ หรือกรอกพิกัดเอง กำหนดรัศมีได้ 10–5,000 เมตร');c.append(card);
+ const form=h('form','form-grid');const name=adminInput('ชื่อสถานที่','loc-name');const lat=adminInput('ละติจูด','loc-lat','number','16.482');const lng=adminInput('ลองจิจูด','loc-lng','number','99.522');const radius=adminInput('รัศมี (เมตร)','loc-radius','number','100');
+ [name,lat,lng,radius].forEach(x=>{x.input.required=true;x.wrap.style.marginBottom='10px';form.append(x.wrap)});lat.input.step='any';lng.input.step='any';radius.input.min='10';radius.input.max='5000';
+ const map=h('div');map.id='admin-location-map';map.style.cssText='height:320px;border-radius:12px;margin:12px 0;background:#eef2f7';form.append(map);
+ const hint=h('p','msg','คลิกแผนที่เพื่อกำหนดหมุด หรือกรอกละติจูด/ลองจิจูดด้วยตนเอง');form.append(hint);
+ const save=h('button','btn g','บันทึกสถานที่');save.type='submit';form.append(save);card.append(form);
+ const listCard=adminCard('สถานที่ที่ตั้งค่าไว้','ระบบอนุญาตให้มีหลายจุดทำงาน และใช้จุดที่อยู่ในรัศมีเป็นเกณฑ์ลงเวลา');c.append(listCard);
+ let leafletMap=null, pin=null;
+ if(window.L){leafletMap=L.map(map).setView([16.482,99.522],13);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(leafletMap);leafletMap.on('click',e=>{lat.input.value=e.latlng.lat.toFixed(6);lng.input.value=e.latlng.lng.toFixed(6);if(pin)pin.setLatLng(e.latlng);else pin=L.marker(e.latlng).addTo(leafletMap)});setTimeout(()=>leafletMap.invalidateSize(),100)}
+ form.onsubmit=async e=>{e.preventDefault();save.disabled=true;try{const result=await apiFetch('/api/admin/locations',{method:'POST',body:JSON.stringify({name:name.input.value.trim(),latitude:Number(lat.input.value),longitude:Number(lng.input.value),radiusMeters:Number(radius.input.value)})});toast(result.message);await loadLocations()}catch(err){toast(err.message,'err')}finally{save.disabled=false}};
+ async function loadLocations(){listCard.replaceChildren(h('h2',null,'สถานที่ที่ตั้งค่าไว้'));try{const data=await apiFetch('/api/admin/locations');if(!data.locations.length){adminMessage(listCard,'ยังไม่มีสถานที่ทำงาน กรุณาเพิ่มสถานที่แรก');return}data.locations.forEach(loc=>{const row=h('div','card');row.style.marginTop='10px';row.append(h('strong',null,loc.name),h('p',null,'พิกัด: '+loc.latitude+', '+loc.longitude),h('p',null,'รัศมี: '+loc.radius_meters+' เมตร · '+(loc.is_active?'เปิดใช้งาน':'ปิดใช้งาน')));const r=adminInput('ปรับรัศมี (เมตร)','radius-'+loc.id,'number',String(loc.radius_meters));r.input.min='10';r.input.max='5000';r.input.style.maxWidth='180px';row.append(r.wrap,adminButton('บันทึกรัศมี',async()=>{try{await apiFetch('/api/admin/locations',{method:'PATCH',body:JSON.stringify({id:loc.id,radiusMeters:Number(r.input.value)})});toast('บันทึกรัศมีแล้ว');loadLocations()}catch(err){toast(err.message,'err')}}),adminButton(loc.is_active?'ปิดใช้งาน':'เปิดใช้งาน',async()=>{try{await apiFetch('/api/admin/locations',{method:'PATCH',body:JSON.stringify({id:loc.id,active:!loc.is_active})});toast('อัปเดตสถานที่แล้ว');loadLocations()}catch(err){toast(err.message,'err') }},'btn o'));listCard.append(row)})}catch(err){adminMessage(listCard,err.message,'err')}}
+ await loadLocations();
+}
+async function page_admin_users(){
+ const c=document.getElementById('content'),card=adminCard('จัดการบัญชีบุคลากร','อนุมัติบัญชีใหม่ ระงับบัญชี และตรวจสอบบทบาทผู้ใช้งาน');c.append(card);
+ try{const data=await apiFetch('/api/admin/personnel');const rows=data.personnel.map(p=>[p.staff_code,p.full_name,p.email||'-',p.position,p.role,p.is_active?'ใช้งาน':'รออนุมัติ/ระงับ',adminButton(p.is_active?'ระงับบัญชี':'อนุมัติบัญชี',async()=>{if(!confirm((p.is_active?'ระงับบัญชี ':'อนุมัติบัญชี ')+p.full_name+' ?'))return;try{const result=await apiFetch('/api/admin/approve',{method:'POST',body:JSON.stringify({id:p.id,active:!p.is_active})});toast(result.message);page_admin_users()}catch(err){toast(err.message,'err')}},p.is_active?'btn o':'btn g')]);card.append(table(['รหัสบุคลากร','ชื่อ-นามสกุล','อีเมล','ตำแหน่ง','บทบาท','สถานะ','ดำเนินการ'],rows,'ยังไม่มีบัญชีบุคลากร'))}catch(err){adminMessage(card,err.message,'err')}
+}
+async function page_admin_leaves(){
+ const c=document.getElementById('content'),card=adminCard('จัดการคำขอลา','ตรวจสอบคำขอและบันทึกผลการพิจารณา');c.append(card);
+ try{const data=await apiFetch('/api/admin/leaves');const rows=data.requests.map(r=>[r.full_name,r.leave_type,r.start_date+' ถึง '+r.end_date,r.reason||'-',r.status==='pending'?'รอพิจารณ':r.status==='approved'?'อนุมัติแล้ว':'ปฏิเสธ',r.status==='pending'?adminButton('อนุมัติ',()=>review(r.id,'approved'),'btn g'): '-',r.status==='pending'?adminButton('ปฏิเสธ',()=>review(r.id,'rejected'),'btn o'):'-']);card.append(table(['บุคลากร','ประเภทลา','ช่วงวันที่','เหตุผล','สถานะ','อนุมัติ','ปฏิเสธ'],rows,'ไม่มีคำขอลา'))}catch(err){adminMessage(card,err.message,'err')}
+ async function review(id,status){if(!confirm(status==='approved'?'ยืนยันอนุมัติคำขอนี้?':'ยืนยันปฏิเสธคำขอนี้?'))return;try{const result=await apiFetch('/api/admin/leaves/review',{method:'POST',body:JSON.stringify({id,status})});toast(result.message);page_admin_leaves()}catch(err){toast(err.message,'err')}}
+}
+async function page_admin_shifts(){
+ const c=document.getElementById('content'),card=adminCard('จัดการเวลาทำงานและกะ','กำหนดชื่อกะ เวลาเริ่ม–สิ้นสุด และเวลาผ่อนผัน');c.append(card);
+ const form=h('form','row');const name=adminInput('ชื่อกะ','shift-name');const start=adminInput('เวลาเริ่ม','shift-start','time','08:30');const end=adminInput('เวลาสิ้นสุด','shift-end','time','17:30');const grace=adminInput('ผ่อนผัน (นาที)','shift-grace','number','15');[name,start,end,grace].forEach(x=>{x.input.required=true;form.append(x.wrap)});const save=h('button','btn g','เพิ่มกะ');save.type='submit';form.append(save);card.append(form);const out=adminCard('รายการกะทำงาน');c.append(out);
+ form.onsubmit=async e=>{e.preventDefault();try{const d=await apiFetch('/api/admin/shifts',{method:'POST',body:JSON.stringify({name:name.input.value.trim(),startTime:start.input.value,endTime:end.input.value,graceMinutes:Number(grace.input.value)})});toast(d.message);load()}catch(err){toast(err.message,'err')}};
+ async function load(){out.replaceChildren(h('h2',null,'รายการกะทำงาน'));try{const d=await apiFetch('/api/admin/shifts');out.append(table(['ชื่อกะ','เริ่ม','สิ้นสุด','ผ่อนผัน','สถานะ'],d.shifts.map(x=>[x.name,x.start_time,x.end_time,x.grace_minutes+' นาที',x.is_active?'ใช้งาน':'ปิดใช้งาน']),'ยังไม่มีกะทำงาน'))}catch(err){adminMessage(out,err.message,'err')}}await load()
+}
+async function page_admin_attendance(){
+ const c=document.getElementById('content'),card=adminCard('ตรวจสอบการลงเวลา','รายการล่าสุดสูงสุด 500 รายการจากฐานข้อมูล');c.append(card);
+ try{const d=await apiFetch('/api/attendance');card.append(table(['บุคลากร','รหัส','ประเภท','วันและเวลา','พิกัด','หมายเหตุ'],d.records.map(x=>[x.full_name||x.personnel_id,x.staff_code||'-',x.attendance_type==='check_in'?'เข้างาน':'ออกงาน',x.recorded_at,x.latitude!=null?x.latitude+', '+x.longitude:'-',x.note||'-']),'ยังไม่มีประวัติการลงเวลา'))}catch(err){adminMessage(card,err.message,'err')}
+}
+
 // ===== 10. ROUTES: จับคู่เส้นทางเว็บกับหน้าที่ต้องแสดง =====
 const ADM=['admin'],SUP=['supervisor','admin'];
 const ROUTES={login:{title:'เข้าสู่ระบบ',fn:page_login,pub:1},'forgot-password':{title:'ลืมรหัสผ่าน',fn:page_forgot,pub:1},
  dashboard:{title:'หน้าหลัก',fn:page_dashboard},attendance:{title:'ลงเวลาเข้า-ออกงาน',fn:page_attendance},'attendance-history':{title:'ประวัติการลงเวลา',fn:page_history}};
 [['absence','ขาดงาน/มาสาย'],['leave-request','ยื่นคำขอลา'],['leave','ประวัติการลา'],['work-summary','สรุปเวลาทำงาน'],['notifications','การแจ้งเตือน'],['profile','โปรไฟล์']].forEach(([k,t])=>ROUTES[k]={title:t,fn:page_stub});
-[['admin-users','จัดการบุคลากร'],['admin-location','จัดการสถานที่ทำงาน'],['admin-shifts','จัดการเวลาทำงานและกะ'],['admin-attendance','ตรวจสอบการลงเวลา'],['admin-reports','รายงาน'],['admin-settings','ตั้งค่าระบบ']].forEach(([k,t])=>ROUTES[k]={title:t,fn:page_stub,roles:ADM});
-ROUTES['admin-leaves']={title:'จัดการคำขอลา',fn:page_stub,roles:SUP};
+[['admin-users','จัดการบุคลากร',page_admin_users],['admin-location','จัดการสถานที่ทำงาน',page_admin_location],['admin-shifts','จัดการเวลาทำงานและกะ',page_admin_shifts],['admin-attendance','ตรวจสอบการลงเวลา',page_admin_attendance],['admin-reports','รายงาน',page_admin_attendance],['admin-settings','ตั้งค่าระบบ',page_admin_location]].forEach(([k,t,fn])=>ROUTES[k]={title:t,fn,roles:ADM});
+ROUTES['admin-leaves']={title:'จัดการคำขอลา',fn:page_admin_leaves,roles:ADM};
 ROUTES.register={title:'สมัครสมาชิก',fn:page_register,pub:1};
 // Frontend-only role guard (casual). Real authorization must be enforced by a backend.
 // อ่าน location.hash, ตรวจการล็อกอิน/บทบาท และเรียกฟังก์ชันของหน้าที่เลือก

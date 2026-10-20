@@ -386,7 +386,7 @@ export default {
         const startDate = String(data?.startDate || "");
         const endDate = String(data?.endDate || "");
         const reason = String(data?.reason || "").trim();
-        if (!leaveType || leaveType.length > 80 || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(endDate) || endDate < startDate || reason.length > 1000) {
+        if (!leaveType || leaveType.length > 80 || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || endDate < startDate || reason.length > 1000) {
           return json({ success: false, message: "กรุณาตรวจสอบประเภทลา วันที่ และเหตุผล" }, 400, cors);
         }
         const result = await env.DB.prepare("INSERT INTO leave_requests (personnel_id, leave_type, start_date, end_date, reason) VALUES (?, ?, ?, ?, ?)").bind(user.id, leaveType, startDate, endDate, reason || null).run();

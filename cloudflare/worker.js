@@ -313,7 +313,19 @@ export default {
         return json({ success: true, shifts: rows.results || [] }, 200, cors);
       }
 
-      if (url.pathname === "/api/admin/shifts" && request.method === "PATCH") {\n        const user = await readToken(request, env);\n        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);\n        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);\n        const data = await body(), id = Number(data?.id), active = data?.active;\n        if (!Number.isInteger(id) || id < 1 || typeof active !== "boolean") return json({ success: false, message: "ข้อมูลกะทำงานไม่ถูกต้อง" }, 400, cors);\n        const result = await env.DB.prepare("UPDATE shifts SET is_active = ? WHERE id = ?").bind(active ? 1 : 0, id).run();\n        if (!result.meta?.changes) return json({ success: false, message: "ไม่พบกะทำงาน" }, 404, cors);\n        await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "shift_status_changed", "shift_id=" + id + "; active=" + active).run();\n        return json({ success: true, message: active ? "เปิดใช้งานกะแล้ว" : "ปิดใช้งานกะแล้ว" }, 200, cors);\n      }\n\n      if (url.pathname === "/api/admin/shifts" && request.method === "POST") {
+      if (url.pathname === "/api/admin/shifts" && request.method === "PATCH") {
+        const user = await readToken(request, env);
+        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
+        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);
+        const data = await body(), id = Number(data?.id), active = data?.active;
+        if (!Number.isInteger(id) || id < 1 || typeof active !== "boolean") return json({ success: false, message: "ข้อมูลกะทำงานไม่ถูกต้อง" }, 400, cors);
+        const result = await env.DB.prepare("UPDATE shifts SET is_active = ? WHERE id = ?").bind(active ? 1 : 0, id).run();
+        if (!result.meta?.changes) return json({ success: false, message: "ไม่พบกะทำงาน" }, 404, cors);
+        await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "shift_status_changed", "shift_id=" + id + "; active=" + active).run();
+        return json({ success: true, message: active ? "เปิดใช้งานกะแล้ว" : "ปิดใช้งานกะแล้ว" }, 200, cors);
+      }
+
+      if (url.pathname === "/api/admin/shifts" && request.method === "POST") {
         const user = await readToken(request, env);
         if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
         if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);

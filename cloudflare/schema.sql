@@ -33,5 +33,5 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   FOREIGN KEY (reviewed_by) REFERENCES personnel(id)
 );
 CREATE INDEX IF NOT EXISTS idx_attendance_personnel_time ON attendance_records(personnel_id, recorded_at);
-CREATE INDEX IF NOT EXISTS idx_personnel_email ON personnel(email);
+-- Ensure one account per email; confirm no duplicate non-empty emails before applying to any populated database.\nCREATE UNIQUE INDEX IF NOT EXISTS idx_personnel_email_unique ON personnel(email COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_leave_personnel_status ON leave_requests(personnel_id, status);

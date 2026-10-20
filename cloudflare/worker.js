@@ -197,7 +197,7 @@ export default {
       if (url.pathname === "/api/password-reset-requests" && request.method === "POST") {
         const data = await body();
         const email = String(data?.email || "").trim().toLowerCase();
-        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254) return json({ success: false, message: "กรุณากรอกอีเมลให้ถูกต้อง" }, 400, cors);
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return json({ success: false, message: "กรุณากรอกอีเมลให้ถูกต้อง" }, 400, cors);
         const person = await env.DB.prepare("SELECT id FROM personnel WHERE email = ? COLLATE NOCASE").bind(email).first();
         if (person) {
           try { await env.DB.prepare("INSERT INTO password_reset_requests (email) VALUES (?)").bind(email).run(); }
@@ -365,7 +365,7 @@ export default {
         const name = String(data?.name || "").trim();
         const start = String(data?.startTime || ""), end = String(data?.endTime || "");
         const grace = Number(data?.graceMinutes ?? 0);
-        if (!name || name.length > 100 || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(start) || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(end) || !Number.isInteger(grace) || grace < 0 || grace > 240) return json({ success: false, message: "กรุณาตรวจสอบชื่อกะ เวลา และเวลาผ่อนผัน" }, 400, cors);
+        if (!name || name.length > 100 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(start) || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(end) || !Number.isInteger(grace) || grace < 0 || grace > 240) return json({ success: false, message: "กรุณาตรวจสอบชื่อกะ เวลา และเวลาผ่อนผัน" }, 400, cors);
         const result = await env.DB.prepare("INSERT INTO shifts (name, start_time, end_time, grace_minutes, is_active) VALUES (?, ?, ?, ?, 1)").bind(name, start, end, grace).run();
         await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "shift_created", "shift_id=" + result.meta?.last_row_id + "; name=" + name).run();
         return json({ success: true, message: "เพิ่มกะทำงานแล้ว", id: result.meta?.last_row_id }, 201, cors);

@@ -136,8 +136,21 @@ export default {
     if (!env.DB) return json({ success: false, message: "ยังไม่ได้เชื่อมต่อฐานข้อมูล" }, 500, cors);
     if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) return json({ success: false, message: "ระบบยังไม่ได้ตั้งค่า JWT_SECRET" }, 503, cors);
 
+    // Bound JSON request size to avoid unnecessarily large payloads reaching D1/crypto.
+    // Read once because Request bodies are streams and cannot be consumed repeatedly.
     const body = async () => {
-      try { return await request.json(); } catch { return null; }
+      try {
+        const raw = await request.text();
+        if (new TextEncoder().encode(raw).byteLength > 16 * 1024) {
+          const error = new Error("REQUEST_TOO_LARGE");
+          error.code = "REQUEST_TOO_LARGE";
+          throw error;
+        }
+        return JSON.parse(raw);
+      } catch (error) {
+        if (error?.code === "REQUEST_TOO_LARGE") throw error;
+        return null;
+      }
     };
 
     try {
@@ -468,6 +481,7 @@ export default {
 
       return json({ success: false, message: "ไม่พบเส้นทางที่ร้องขอ" }, 404, cors);
     } catch (error) {
+      if (error?.code === "REQUEST_TOO_LARGE") return json({ success: false, message: "ข้อมูลคำขอมีขนาดใหญ่เกินกำหนด (สูงสุด 16 KB)" }, 413, cors);
       if (/UNIQUE constraint failed/i.test(String(error?.message))) return json({ success: false, message: "รหัสบุคลากรหรืออีเมลนี้ถูกใช้แล้ว" }, 409, cors);
       console.error("Attendance API error", error?.message || error);
       return json({ success: false, message: "เกิดข้อผิดพลาดภายในระบบ กรุณาลองใหม่" }, 500, cors);

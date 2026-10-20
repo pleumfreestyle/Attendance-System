@@ -1,9 +1,28 @@
 // ระบบลงชื่อเข้า-ออกงาน — ต้นแบบ frontend ไฟล์เดียว (localStorage + mock data). ไม่ใช่ระบบความปลอดภัยจริง
-// ===== Storage & seed =====
+// ============================================================
+// สารบัญ app.js
+// 1) Storage & seed       : อ่าน/เขียนข้อมูลตัวอย่างใน localStorage
+// 2) Utils                : ฟังก์ชันช่วยแสดงผล วันที่ ตาราง และข้อความแจ้งเตือน
+// 3) Auth                 : เข้าสู่ระบบ ออกจากระบบ และตรวจสิทธิ์หน้าเว็บ (เดโม)
+// 4) Layout & Menu        : โครงหน้าเว็บ เมนูด้านข้าง และเมนู Hamburger
+// 5) Login / Forgot       : หน้าล็อกอินและหน้าลืมรหัสผ่าน (จำลอง)
+// 6) Dashboard             : หน้า Home และข้อมูลสรุปตามบทบาท
+// 7) Attendance History   : หน้าประวัติการลงเวลา
+// 8) Attendance GPS       : ตรวจตำแหน่งและบันทึกเวลาเข้า-ออก (เดโมฝั่งเบราว์เซอร์)
+// 9) Other Pages          : โปรไฟล์ การแจ้งเตือน และหน้าที่ยังเป็น placeholder
+// 10) Routes              : เชื่อม URL hash กับหน้าเว็บ และตรวจบทบาทเบื้องต้น
+// 11) Register             : ส่งข้อมูลสมัครสมาชิกไปยัง API ภายนอก
+//
+// หมายเหตุความปลอดภัย: โปรเจกต์นี้ยังมีส่วนที่เป็นเดโมและเก็บข้อมูลในเบราว์เซอร์
+// ห้ามใช้ localStorage เป็นที่เก็บรหัสผ่านจริง และต้องตรวจสิทธิ์/ตำแหน่งบน backend
+// ============================================================
+
+// ===== 1. STORAGE & SEED: จัดเก็บข้อมูลและสร้างข้อมูลตัวอย่าง =====
 // localStorage layer. FRONTEND-ONLY DEMO: not secure storage.
 const K='att2_';
 const rd=(k,d)=>{try{const v=localStorage.getItem(K+k);return v?JSON.parse(v):d}catch{return d}};
 const wr=(k,v)=>{try{localStorage.setItem(K+k,JSON.stringify(v));return true}catch{return false}};
+// สร้างข้อมูลตัวอย่างเริ่มต้นสำหรับบัญชี กะทำงาน สถานที่ และประวัติลงเวลา
 function seed(){
   const users=[
    {id:'U001',name:'สมชาย ใจดี',email:'employee@example.com',password:'Employee123!',role:'employee',dept:'ฝ่ายบัญชี',position:'นักบัญชี',supervisorId:'U002',active:true},
@@ -18,6 +37,7 @@ function seed(){
    location:{name:'สำนักงานตัวอย่าง (พิกัดตัวอย่าง)',lat:13.7563,lng:100.5018,radius:1000},
    notifications:[{id:'N1',userId:'U001',text:'ยินดีต้อนรับสู่ระบบลงเวลา (ข้อมูลตัวอย่าง)',at:now.toISOString(),read:false,link:'#/dashboard'}],audit:[]};
 }
+// ตรวจว่ามีข้อมูลเริ่มต้นแล้วหรือยัง; ถ้ายังให้สร้างข้อมูลเดโม
 function ensureSeed(){ensureLeaves();if(!rd('seeded',false)){const s=seed();for(const k in s)wr(k,s[k]);wr('seeded',true)}}
 const getUsers=()=>rd('users',[]);
 const getCurrentUser=()=>{const id=rd('session',null);return getUsers().find(u=>u.id===id&&u.active)||null};
@@ -30,48 +50,57 @@ const saveWorkLocation=l=>wr('location',l);
 const getNotifications=()=>rd('notifications',[]);
 const saveNotifications=n=>wr('notifications',n);
 const getAuditLogs=()=>rd('audit',[]);
+// ล้างเฉพาะรายการ localStorage ที่ขึ้นต้นด้วย att2_ แล้วสร้างข้อมูลเดโมใหม่
 function resetDemoData(){try{const ks=[];for(let i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));ks.filter(k=>k&&k.startsWith(K)).forEach(k=>localStorage.removeItem(k))}catch{}ensureSeed()}
+// สร้างรายการลาตัวอย่างครั้งแรก ถ้ายังไม่มีข้อมูลการลา
 function ensureLeaves(){if(rd('leaves',null)!==null)return;const d=n=>{const x=new Date();x.setDate(x.getDate()+n);return x.toLocaleDateString('sv')};
   wr('leaves',[{id:'L1',userId:'U001',type:'ลาพักร้อน',start:d(-20),end:d(-19),days:2,submitted:d(-25),status:'approved',approver:'สุดา รักงาน'},
    {id:'L2',userId:'U001',type:'ลากิจ',start:d(7),end:d(7),days:1,submitted:d(-1),status:'pending_supervisor',approver:'-'}])}
 const getLeaves=()=>rd('leaves',[]);
 const saveLeaves=l=>wr('leaves',l);
 
-// ===== Utils =====
+// ===== 2. UTILS: ฟังก์ชันช่วยใช้ซ้ำในหลายหน้า =====
 const fmtDate=s=>new Date(s).toLocaleDateString('th-TH-u-ca-buddhist',{day:'numeric',month:'short',year:'numeric'});
 const fmtTime=s=>s?new Date(s).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}):'-';
 const todayStr=()=>new Date().toLocaleDateString('sv');
+// คำนวณระยะทางเป็นเมตรระหว่างพิกัด GPS สองจุด
 function haversine(a,b,c,d){const R=6371000,t=x=>x*Math.PI/180,dl=t(c-a),dn=t(d-b);
   const x=Math.sin(dl/2)**2+Math.cos(t(a))*Math.cos(t(c))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
 function h(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+// แสดงข้อความแจ้งเตือนชั่วคราวบนหน้าจอ
 function toast(msg,type='ok'){const t=h('div','toast',msg);t.style.background=type==='ok'?'#16a34a':type==='warn'?'#ea580c':'#dc2626';document.body.append(t);setTimeout(()=>t.remove(),3000)}
 const badge=(text,type='')=>h('span','badge '+type,text);
+// สร้างตาราง HTML จากหัวตารางและแถวข้อมูลที่ส่งเข้ามา
 function table(head,rows,empty='ไม่พบข้อมูล'){const w=h('div','tw');if(!rows.length){w.append(h('p','msg',empty));return w}
   const t=h('table'),tr=h('tr');head.forEach(x=>tr.append(h('th',null,x)));t.append(tr);
   rows.forEach(r=>{const row=h('tr');r.forEach(c=>{const td=h('td');td.append(c instanceof Node?c:String(c));row.append(td)});t.append(row)});w.append(t);return w}
 
-// ===== Auth (demo only) =====
+// ===== 3. AUTH: เข้าสู่ระบบ ออกจากระบบ และตรวจสิทธิ์ (เดโมเท่านั้น) =====
 // FRONTEND-ONLY DEMO AUTH. Plain-text passwords in localStorage are NOT secure; real auth must be server-side.
 
+// ตรวจสอบบัญชีในข้อมูลเดโมและบันทึก session ปัจจุบัน
 function login(email,pw){ensureSeed();const u=getUsers().find(x=>x.email===email.trim().toLowerCase());
   if(!u||u.password!==pw)return{error:'อีเมลหรือรหัสผ่านไม่ถูกต้อง'};if(!u.active)return{error:'บัญชีนี้ถูกระงับ'};setCurrentUser(u);return{user:u}}
+// ออกจากระบบและกลับไปหน้า Login
 function logout(){setCurrentUser(null);location.href='#/login'}
+// ตรวจว่ามีผู้ใช้ล็อกอินและมีบทบาทตามที่หน้าต้องการหรือไม่
 function requireAuth(roles){ensureSeed();const u=getCurrentUser();if(!u){location.href='#/login';return null}
   if(roles&&!roles.includes(u.role)){location.href='#/dashboard';return null}return u}
 
 const timers=[];const T=(f,ms)=>{timers.push(setInterval(f,ms))};let PAGE={key:'',title:''},LAY=null;
 
-// ===== Layout =====
+// ===== 4. LAYOUT & MENU: โครงหน้าเว็บ เมนู และแถบด้านบน =====
 // Shared layout. NOTE: role checks here are casual UI guards only; real authorization must be enforced by a backend.
 
 
-
 const ROLE={employee:'พนักงาน',supervisor:'หัวหน้างาน',admin:'ผู้ดูแล/HR'};
+// สร้างรายการเมนูที่เหมาะกับบทบาท employee / supervisor / admin
 function menuFor(role){
   const m=[['#/dashboard','🏠',role==='admin'?'Admin Dashboard':'Home'],['#/attendance','📍','ลงเวลาเข้า-ออกงาน'],['#/attendance-history','🕘','ประวัติการลงเวลา'],['#/absence','⚠️','ขาดงาน/มาสาย'],['#/leave-request','📝','ยื่นคำขอลา'],['#/leave','📅','ประวัติการลา'],['#/work-summary','📊','สรุปเวลาทำงาน'],['#/notifications','🔔','การแจ้งเตือน'],['#/profile','👤','โปรไฟล์']];
   if(role==='supervisor')m.push(['#/admin-leaves','✅','รายการรออนุมัติ'],['#/admin-leaves?view=history','🗂️','ประวัติการอนุมัติ']);
   if(role==='admin')m.push(['#/admin-users','👥','จัดการบุคลากร'],['#/admin-location','🗺️','จัดการสถานที่ทำงาน'],['#/admin-shifts','⏱️','จัดการเวลาทำงานและกะ'],['#/admin-attendance','🔍','ตรวจสอบการลงเวลา'],['#/admin-leaves','🧾','จัดการคำขอลา'],['#/admin-reports','📈','รายงาน'],['#/admin-settings','⚙️','ตั้งค่าระบบ']);
   return m}
+// สร้างโครงหน้าเว็บหลัก: Sidebar, Hamburger, Topbar, โปรไฟล์ และเนื้อหา
 function buildLayout(user){
   const content=h('main'),mq=matchMedia('(max-width:800px)');content.id='content';
   const shell=h('div','shell'),side=h('nav','side'),ov=h('div','ov');ov.hidden=true;side.id='side';side.setAttribute('aria-label','เมนูหลัก');
@@ -98,7 +127,8 @@ function buildLayout(user){
   um.append(ub,dd);top.append(left,h('div','tr'));top.lastChild.append(clock,bell,um);
   main.append(top,content);shell.append(side,ov,main);document.getElementById('app').replaceChildren(shell);return{uid:user.id}}
 
-// ===== Pages =====
+// ===== 5–9. PAGES: ฟังก์ชันแสดงผลของแต่ละหน้า =====
+// ตั้งค่าฟอร์ม Login ตรวจสอบข้อมูล และแสดงข้อผิดพลาด
 function page_login(){
   const f=document.getElementById('f');
   const err=document.getElementById('err');
@@ -154,6 +184,7 @@ function page_login(){
   };
 }
 
+// หน้าลืมรหัสผ่านแบบจำลอง — ไม่ได้ส่งอีเมลหรือรีเซ็ตรหัสผ่านจริง
 function page_forgot(){
 // DEMO ONLY: no email is sent.
 const f=document.getElementById('f'),m=document.getElementById('msg');
@@ -165,8 +196,8 @@ f.onsubmit=e=>{e.preventDefault();const v=document.getElementById('email').value
 // Role-aware Home. Data is read from localStorage on each render so check-in/out updates appear automatically.
 
 
-
 const QUOTA=10,ST={pending_supervisor:'รอหัวหน้างานอนุมัติ',pending_hr:'รอฝ่ายบุคคลอนุมัติ',approved:'อนุมัติแล้ว',rejected:'ไม่อนุมัติ',withdrawn:'ถอนคำขอแล้ว'};
+// รวมข้อมูลที่หน้า Home ต้องใช้ เช่น วันนี้ ทีม คำขอลา และสถิติ
 function getDashboardData(u){
   const recs=getAttendanceRecords(),leaves=getLeaves(),users=getUsers().filter(x=>x.active),td=todayStr(),mine=recs.filter(r=>r.userId===u.id);
   const d={mine,today:mine.find(r=>r.date===td),shift:getShifts()[0],loc:getWorkLocation(),myLeaves:leaves.filter(l=>l.userId===u.id),notes:getNotifications().filter(n=>n.userId===u.id)};
@@ -181,6 +212,7 @@ const stat=(l,v)=>{const d=h('div','card stat');d.append(h('span',null,l),h('b',
 const hours=r=>{if(!r)return'-';const ms=(r.checkOut?new Date(r.checkOut):new Date())-new Date(r.checkIn),m=Math.max(0,Math.floor(ms/60000));return`${Math.floor(m/60)} ชม. ${m%60} นาที`+(r.checkOut?'':' (กำลังนับ)')};
 async function perm(){try{return(await navigator.permissions.query({name:'geolocation'})).state}catch{return'unknown'}}
 const PT={granted:'อนุญาตแล้ว',denied:'ถูกปฏิเสธ',prompt:'ยังไม่ได้ขออนุญาต',unknown:'ไม่ทราบสถานะ'};
+// วาดการ์ดและกิจกรรมล่าสุดบนหน้า Home ตามบทบาทผู้ใช้
 async function render(u,c){const d=getDashboardData(u),t=d.today,p=await perm();let lp=null;try{lp=JSON.parse(localStorage.getItem('att2_lastpos'))}catch{}
   const w=h('section','card');w.append(h('h1',null,`สวัสดี, ${u.name}`),h('p',null,`วันนี้ ${new Date().toLocaleDateString('th-TH-u-ca-buddhist',{dateStyle:'full'})}`),
     h('p',null,`แผนก: ${u.dept} · กะ: ${d.shift.name} ${d.shift.start}–${d.shift.end} · สถานที่: ${d.loc.name}`));
@@ -201,9 +233,11 @@ async function render(u,c){const d=getDashboardData(u),t=d.today,p=await perm();
   const R=h('section','card');R.append(h('h2',null,'กิจกรรมล่าสุด'));
   if(!ev.length)R.append(h('p','msg','ยังไม่มีกิจกรรม'));else{const ul=h('ul');ev.forEach(e=>{const li=h('li'),a=h('a',null,e.t);a.href=e.href;li.append(a);ul.append(li)});R.append(ul)}parts.push(R);
   c.replaceChildren(...parts)}
+// เปิดหน้า Home และตั้งเวลารีเฟรชข้อมูลทุก 30 วินาที
 function page_dashboard(u){const c=document.getElementById('content');c.append(h('p','msg','กำลังโหลด...'));render(u,c);T(()=>render(u,c),30000)}
 
 
+// แสดงประวัติลงเวลา พร้อมตัวกรองเดือน สถานะ และวันที่
 function page_history(u){const out=document.getElementById('out'),mo=document.getElementById('mo'),st=document.getElementById('st'),dt=document.getElementById('dt');
   const draw=()=>{let r=getAttendanceRecords().filter(x=>x.userId===u.id);if(mo.value)r=r.filter(x=>x.date.startsWith(mo.value));if(dt.value)r=r.filter(x=>x.date===dt.value);
     if(st.value)r=r.filter(x=>st.value==='late'?x.late:!x.late);r.sort((a,b)=>b.date.localeCompare(a.date));
@@ -213,6 +247,7 @@ function page_history(u){const out=document.getElementById('out'),mo=document.ge
 // PROTOTYPE ONLY: distance checks here run in the browser and can be bypassed.
 // Production must re-validate GPS, distance, and server time on a backend.
 
+// หน้าลงเวลา: แสดงแผนที่ ตรวจ GPS คำนวณระยะ และบันทึกเข้า/ออก
 function page_attendance(u){const $=id=>document.getElementById(id),loc=getWorkLocation(),shift=getShifts()[0];let pos=null,dist=null,map,me;
   $('wp').textContent=`${loc.name} (${loc.lat}, ${loc.lng}) รัศมี ${loc.radius} ม.`;$('sh').textContent=`${shift.name} ${shift.start}–${shift.end}`;
   T(()=>$('clk').textContent=new Date().toLocaleString('th-TH-u-ca-buddhist'),1000);
@@ -240,6 +275,7 @@ function page_attendance(u){const $=id=>document.getElementById(id),loc=getWorkL
 
 // Generic page: real profile (read-only) and notifications; other pages are labeled placeholders.
 
+// แสดงหน้าโปรไฟล์/แจ้งเตือนจริงบางส่วน; หน้าอื่นเป็นโครงรอพัฒนาต่อ
 function page_stub(u){const c=document.getElementById('content'),p=PAGE.key;c.append(h('h1',null,PAGE.title));
   if(p==='profile'){c.append(table(['ข้อมูล','ค่า'],[['รหัสพนักงาน',u.id],['ชื่อ',u.name],['อีเมล',u.email],['แผนก',u.dept],['ตำแหน่ง',u.position],['บทบาท',u.role],['สถานะบัญชี','ใช้งานอยู่']]))}
   else if(p==='notifications'){const box=h('div','card');c.append(box);const draw=()=>{const all=getNotifications(),mine=all.filter(n=>n.userId===u.id);box.replaceChildren();
@@ -247,7 +283,7 @@ function page_stub(u){const c=document.getElementById('content'),p=PAGE.key;c.ap
     if(!mine.length)box.append(h('p','msg','ไม่มีการแจ้งเตือน'));mine.forEach(n=>{const r=h('p',null,`${n.read?'':'● '}${n.text} — ${fmtDate(n.at)}`);if(!n.read){const m=h('button','btn','อ่านแล้ว');m.onclick=()=>{n.read=true;saveNotifications(all);draw()};r.append(' ',m)}box.append(r)})};draw()}
   else{const m=h('div','card');m.append(h('p','msg','ต้นแบบ: หน้านี้ยังไม่ได้พัฒนาฟังก์ชันในรอบนี้ (ลิงก์ใช้งานได้ ไม่มีหน้าเสีย)'));const a=h('a','btn','กลับหน้าหลัก');a.href='#/dashboard';m.append(a);c.append(m)}}
 
-// ===== Routes =====
+// ===== 10. ROUTES: จับคู่เส้นทางเว็บกับหน้าที่ต้องแสดง =====
 const ADM=['admin'],SUP=['supervisor','admin'];
 const ROUTES={login:{title:'เข้าสู่ระบบ',fn:page_login,pub:1},'forgot-password':{title:'ลืมรหัสผ่าน',fn:page_forgot,pub:1},
  dashboard:{title:'หน้าหลัก',fn:page_dashboard},attendance:{title:'ลงเวลาเข้า-ออกงาน',fn:page_attendance},'attendance-history':{title:'ประวัติการลงเวลา',fn:page_history}};
@@ -256,6 +292,7 @@ const ROUTES={login:{title:'เข้าสู่ระบบ',fn:page_login,pub
 ROUTES['admin-leaves']={title:'จัดการคำขอลา',fn:page_stub,roles:SUP};
 ROUTES.register={title:'สมัครสมาชิก',fn:page_register,pub:1};
 // Frontend-only role guard (casual). Real authorization must be enforced by a backend.
+// อ่าน location.hash, ตรวจการล็อกอิน/บทบาท และเรียกฟังก์ชันของหน้าที่เลือก
 function route(){timers.splice(0).forEach(clearInterval);
  const key=(location.hash.slice(2)||'').split('?')[0],r=ROUTES[key],u=getCurrentUser(),app=document.getElementById('app'),go=k=>location.replace('#/'+k);
  if(!r)return go(u?'dashboard':'login');
@@ -268,7 +305,9 @@ function route(){timers.splice(0).forEach(clearInterval);
  const c=document.getElementById('content');c.replaceChildren();const t=document.getElementById('t-'+key);if(t)c.append(t.content.cloneNode(true));r.fn(u);scrollTo(0,0)}
 addEventListener('hashchange',route);ensureSeed();route();
 
-// สมัครสมาชิก: ส่งข้อมูลไปยัง Cloudflare Worker เพื่อบันทึกลง D1
+// ===== 11. REGISTER: สมัครสมาชิกผ่าน API =====
+// ส่งข้อมูลไปยัง Cloudflare Worker เพื่อบันทึกลงฐานข้อมูล D1
+// ตรวจฟอร์มสมัครสมาชิกและส่งข้อมูลไป API; ไม่เก็บรหัสผ่านลง localStorage
 function page_register() {
     const $ = id => document.getElementById(id);
     const form = $('f');

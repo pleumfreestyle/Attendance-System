@@ -234,8 +234,8 @@ function page_attendance(u){const $=id=>document.getElementById(id),loc=getWorkL
     navigator.geolocation.getCurrentPosition(p=>got(p.coords),e=>{$('gps').textContent=e.code===1?'ถูกปฏิเสธสิทธิ์ตำแหน่ง: กดไอคอนกุญแจข้าง URL > อนุญาต "ตำแหน่ง" แล้วกดรีเฟรชตำแหน่ง':e.code===3?'หมดเวลาค้นหาตำแหน่ง กรุณากดลองใหม่':'ไม่พบตำแหน่ง กรุณากดลองใหม่'},{enableHighAccuracy:true,timeout:10000,maximumAge:0})}
   function act(kind){if(dist==null||dist>loc.radius)return toast('อยู่นอกพื้นที่ปฏิบัติงาน','err');const t=today(),now=new Date();
     if(kind==='in'){if(t)return toast('ลงชื่อเข้างานแล้ว','warn');const[hh,mm]=shift.start.split(':').map(Number),lim=new Date(now);lim.setHours(hh,mm+shift.grace,0,0);
-      saveAttendanceRecord({id:'A'+Date.now(),userId:u.id,date:todayStr(),checkIn:now.toISOString(),checkOut:null,shiftId:shift.id,late:now>lim,distance:dist,accuracy:pos.acc});toast('ลงชื่อเข้างานสำเร็จ')}
-    else{if(!t)return toast('ต้องลงชื่อเข้างานก่อน','err');if(t.checkOut)return toast('ลงชื่อออกงานแล้ว','warn');t.checkOut=now.toISOString();saveAttendanceRecord(t);toast('ลงชื่อออกงานสำเร็จ')}ui()}
+      const saved=saveAttendanceRecord({id:'A'+Date.now(),userId:u.id,date:todayStr(),checkIn:now.toISOString(),checkOut:null,shiftId:shift.id,late:now>lim,distance:dist,accuracy:pos.acc});if(!saved)return toast('บันทึกข้อมูลไม่สำเร็จ พื้นที่จัดเก็บในเบราว์เซอร์อาจเต็มหรือถูกปิดใช้งาน','err');toast('ลงชื่อเข้างานสำเร็จ')}
+    else{if(!t)return toast('ต้องลงชื่อเข้างานก่อน','err');if(t.checkOut)return toast('ลงชื่อออกงานแล้ว','warn');const previousCheckOut=t.checkOut;t.checkOut=now.toISOString();if(!saveAttendanceRecord(t)){t.checkOut=previousCheckOut;return toast('บันทึกข้อมูลไม่สำเร็จ พื้นที่จัดเก็บในเบราว์เซอร์อาจเต็มหรือถูกปิดใช้งาน','err')}toast('ลงชื่อออกงานสำเร็จ')}ui()}
   $('ci').onclick=()=>act('in');$('co').onclick=()=>act('out');$('rf').onclick=refresh;$('dev').onchange=refresh;ui();refresh()}
 
 // Generic page: real profile (read-only) and notifications; other pages are labeled placeholders.

@@ -300,6 +300,19 @@ function page_stub(u){const c=document.getElementById('content'),p=PAGE.key;c.ap
   else{const m=h('div','card');m.append(h('p','msg','ต้นแบบ: หน้านี้ยังไม่ได้พัฒนาฟังก์ชันในรอบนี้ (ลิงก์ใช้งานได้ ไม่มีหน้าเสีย)'));const a=h('a','btn','กลับหน้าหลัก');a.href='#/dashboard';m.append(a);c.append(m)}}
 
 
+async function page_leave_request(u){
+ const c=document.getElementById('content'),card=h('section','card');card.append(h('h2',null,'ยื่นคำขอลา'),h('p','msg','คำขอจะถูกบันทึกลงฐานข้อมูลและส่งให้แอดมินพิจารณา'));c.append(card);
+ const form=h('form','form-grid');
+ const type=adminInput('ประเภทการลา','leave-type');type.input.type='text';type.input.placeholder='เช่น ลาป่วย ลากิจ ลาพักผ่อน';type.input.required=true;
+ const start=adminInput('วันที่เริ่มลา','leave-start','date'),end=adminInput('วันที่สิ้นสุด','leave-end','date'),reason=adminInput('เหตุผล','leave-reason');reason.input.placeholder='ระบุเหตุผล (ถ้ามี)';
+ [type,start,end,reason].forEach(x=>{x.wrap.style.marginBottom='12px';form.append(x.wrap)});
+ const submit=h('button','btn g','ส่งคำขอลา');submit.type='submit';form.append(submit);card.append(form);
+ const history=adminCard('คำขอของฉัน','ประวัติคำขอจากบัญชีนี้');c.append(history);
+ form.onsubmit=async e=>{e.preventDefault();if(end.input.value<start.input.value)return toast('วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่มลา','err');submit.disabled=true;try{const d=await apiFetch('/api/leave-requests',{method:'POST',body:JSON.stringify({leaveType:type.input.value.trim(),startDate:start.input.value,endDate:end.input.value,reason:reason.input.value.trim()})});toast(d.message);form.reset();await loadMine()}catch(err){toast(err.message,'err')}finally{submit.disabled=false}};
+ async function loadMine(){try{const d=await apiFetch('/api/leave-requests');history.replaceChildren(h('h2',null,'คำขอของฉัน'));history.append(table(['ประเภท','วันที่','เหตุผล','สถานะ'],(d.requests||[]).map(x=>[x.leave_type,x.start_date+' ถึง '+x.end_date,x.reason||'—',x.status==='pending'?'รอพิจารณา':x.status==='approved'?'อนุมัติแล้ว':'ปฏิเสธ']),'ยังไม่มีคำขอ'))}catch(err){adminMessage(history,err.message,'err')}}
+ await loadMine()
+}
+
 /* ===== ADMIN PAGES: ใช้งาน Cloudflare API จริง ===== */
 function adminCard(title,description){const c=h('section','card');c.append(h('h2',null,title));if(description)c.append(h('p','msg',description));return c}
 function adminButton(label,fn,cls='btn'){const b=h('button',cls,label);b.type='button';b.onclick=fn;return b}
@@ -344,7 +357,7 @@ async function page_admin_attendance(){
 const ADM=['admin'],SUP=['supervisor','admin'];
 const ROUTES={login:{title:'เข้าสู่ระบบ',fn:page_login,pub:1},'forgot-password':{title:'ลืมรหัสผ่าน',fn:page_forgot,pub:1},
  dashboard:{title:'หน้าหลัก',fn:page_dashboard},attendance:{title:'ลงเวลาเข้า-ออกงาน',fn:page_attendance},'attendance-history':{title:'ประวัติการลงเวลา',fn:page_history}};
-[['absence','ขาดงาน/มาสาย'],['leave-request','ยื่นคำขอลา'],['leave','ประวัติการลา'],['work-summary','สรุปเวลาทำงาน'],['notifications','การแจ้งเตือน'],['profile','โปรไฟล์']].forEach(([k,t])=>ROUTES[k]={title:t,fn:page_stub});
+[['absence','ขาดงาน/มาสาย'],['leave','ประวัติการลา'],['work-summary','สรุปเวลาทำงาน'],['notifications','การแจ้งเตือน'],['profile','โปรไฟล์']].forEach(([k,t])=>ROUTES[k]={title:t,fn:page_stub});\nROUTES['leave-request']={title:'ยื่นคำขอลา',fn:page_leave_request};
 [['admin-users','จัดการบุคลากร',page_admin_users],['admin-location','จัดการสถานที่ทำงาน',page_admin_location],['admin-shifts','จัดการเวลาทำงานและกะ',page_admin_shifts],['admin-attendance','ตรวจสอบการลงเวลา',page_admin_attendance],['admin-reports','รายงาน',page_admin_attendance],['admin-settings','ตั้งค่าระบบ',page_stub]].forEach(([k,t,fn])=>ROUTES[k]={title:t,fn,roles:ADM});
 ROUTES['admin-leaves']={title:'จัดการคำขอลา',fn:page_admin_leaves,roles:ADM};
 ROUTES.register={title:'สมัครสมาชิก',fn:page_register,pub:1};

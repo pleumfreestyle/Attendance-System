@@ -9,6 +9,8 @@
     </head>
     <body>
         <div id="app"></div>
+        
+        <!--หน้าเข้าสู่ระบบ-->
         <template id="t-login">
             <main class="login">
             <div class="card" style="max-width:400px;margin:auto">
@@ -33,15 +35,8 @@
                         </p>
                         <button class="btn" style="width:100%">เข้าสู่ระบบ</button>
                     </form>
-                </div>
-                <div class="card">
-                    <b>บัญชีทดลอง (เดโมเท่านั้น)</b>
-                    <p>พนักงาน: employee@example.com / Employee123!</p>
-                    <p>หัวหน้า: supervisor@example.com / Supervisor123!</p>
-                    <p>ผู้ดูแล: admin@example.com / Admin123!</p>
-                    <button id="reset" class="btn o" type="button">รีเซ็ตข้อมูลตัวอย่าง</button>
-                </div>
-                <span>
+                </div >
+                <span  style="display:block;text-align:center;margin-top:12px">
                     ไม่มีบัญชี?
                     <a href="#/register">สมัครสมาชิก</a>
                 </span>
@@ -49,6 +44,7 @@
             </main>
         </template>
 
+        <!--ลืมรหัสผ่าน-->
         <template id="t-forgot-password">
             <main class="login">
                 <div class="card">
@@ -63,13 +59,14 @@
                             <p id="msg" class="msg" role="alert"></p>
                         <button class="btn" style="width:100%">ส่งลิงก์รีเซ็ต (จำลอง)</button>
                     </form>
-                    <p style="margin-top:12px">
+                    <p style="display:block;text-align:center;margin-top:12px">
                         <a href="#/login">กลับไปหน้าเข้าสู่ระบบ</a>
                     </p>
                 </div>
             </main>
         </template> 
-        
+
+        <!--สมัตสมาชิก-->
 <template id="t-register">
     <main class="login">
         <div class="card">
@@ -98,13 +95,14 @@
                 <button class="btn" style="width:100%">สมัครสมาชิก</button>
             </form>
 
-            <p style="margin-top:12px">
+            <p style="display:block;text-align:center;margin-top:12px">
                 มีบัญชีแล้ว?
                 <a href="#/login">เข้าสู่ระบบ</a>
             </p>
         </div>
     </main>
 </template>
+
 <template id="t-attendance">
     <div class="card">
         <p>เวลาปัจจุบัน: 

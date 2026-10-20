@@ -50,5 +50,3 @@ CREATE TABLE IF NOT EXISTS password_reset_requests (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_password_reset_pending_email
   ON password_reset_requests(email COLLATE NOCASE) WHERE status = 'pending';
-
-ALTER TABLE personnel ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;

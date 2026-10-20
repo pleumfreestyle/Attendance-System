@@ -340,6 +340,7 @@ export default {
         const id = Number(data?.id);
         const active = data?.active;
         if (!Number.isInteger(id) || id < 1 || typeof active !== "boolean") return json({ success: false, message: "ข้อมูลอนุมัติไม่ถูกต้อง" }, 400, cors);
+        if (id === Number(user.id) && !active) return json({ success: false, message: "ไม่สามารถระงับบัญชีแอดมินที่กำลังใช้งานอยู่ได้" }, 400, cors);
         const result = await env.DB.prepare("UPDATE personnel SET is_active = ? WHERE id = ?").bind(active ? 1 : 0, id).run();
         if (!result.meta?.changes) return json({ success: false, message: "ไม่พบบัญชีบุคลากร" }, 404, cors);
         await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, active ? "personnel_approved" : "personnel_suspended", "personnel_id=" + id).run();

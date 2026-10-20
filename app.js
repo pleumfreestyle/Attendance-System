@@ -32,9 +32,15 @@ function seed(){
   for(let i=1;i<=24;i++){const d=new Date(now);d.setDate(d.getDate()-i);if([0,6].includes(d.getDay()))continue;
     const late=i%5===0;const ci=new Date(d);ci.setHours(8,late?50:10+(i*7)%15,0,0);const co=new Date(d);co.setHours(17,35,0,0);
     recs.push({id:'A'+i,userId:'U001',date:d.toLocaleDateString('sv'),checkIn:ci.toISOString(),checkOut:co.toISOString(),shiftId:'S1',late,distance:120+i*9,accuracy:20});}
-  return{users,records:recs,
-   shifts:[{id:'S1',name:'กะเช้า',start:'08:30',end:'17:30',grace:15,overnight:false}],
-   location:{name:'สำนักงานตัวอย่าง (พิกัดตัวอย่าง)',lat:13.7563,lng:100.5018,radius:1000},
+  return{
+          users,records:recs,
+     shifts:[{id:'S1',name:'กะเช้า',start:'08:30',end:'17:30',grace:15,overnight:false}],
+   location: {
+    name: 'สถานที่ทำงาน',
+    lat: 14.234136593116895,
+    lng: 100.57736773976643,
+    radius: 500
+},
    notifications:[{id:'N1',userId:'U001',text:'ยินดีต้อนรับสู่ระบบลงเวลา (ข้อมูลตัวอย่าง)',at:now.toISOString(),read:false,link:'#/dashboard'}],audit:[]};
 }
 // ตรวจว่ามีข้อมูลเริ่มต้นแล้วหรือยัง; ถ้ายังให้สร้างข้อมูลเดโม

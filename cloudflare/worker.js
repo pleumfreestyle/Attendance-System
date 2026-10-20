@@ -257,7 +257,7 @@ export default {
               SELECT 1 FROM password_reset_requests WHERE id = ? AND status = 'pending'
             )`).bind(stored, person.id, id),
           env.DB.prepare("UPDATE password_reset_requests SET status = 'completed', processed_by = ?, processed_at = datetime('now') WHERE id = ? AND status = 'pending'").bind(user.id, id),
-          env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) SELECT ?, ?, ? WHERE changes() >= 0 AND EXISTS (SELECT 1 FROM password_reset_requests WHERE id = ? AND status = 'completed' AND processed_by = ?)").bind(user.id, "password_reset_admin", "request_id=" + id + "; personnel_id=" + person.id, id, user.id)
+          env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) SELECT ?, ?, ? WHERE changes() = 1").bind(user.id, "password_reset_admin", "request_id=" + id + "; personnel_id=" + person.id)
         ]);
         if (Number(resetResults?.[0]?.meta?.changes || 0) !== 1 || Number(resetResults?.[1]?.meta?.changes || 0) !== 1) {
           return json({ success: false, message: "คำขอนี้ถูกจัดการไปแล้ว กรุณารีเฟรชรายการ" }, 409, cors);

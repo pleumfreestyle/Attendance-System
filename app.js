@@ -1,20 +1,20 @@
-// ระบบลงชื่อเข้า-ออกงาน — ต้นแบบ frontend ไฟล์เดียว (localStorage + mock data). ไม่ใช่ระบบความปลอดภัยจริง
+// ระบบลงชื่อเข้า-ออกงาน — frontend เชื่อม Cloudflare Worker และ D1
 // ============================================================
 // สารบัญ app.js
-// 1) Storage & seed       : อ่าน/เขียนข้อมูลตัวอย่างใน localStorage
+// 1) API & Session         : อ่านข้อมูลจริงจาก backend
 // 2) Utils                : ฟังก์ชันช่วยแสดงผล วันที่ ตาราง และข้อความแจ้งเตือน
 // 3) Auth                 : เข้าสู่ระบบ ออกจากระบบ และตรวจสิทธิ์หน้าเว็บ (เดโม)
 // 4) Layout & Menu        : โครงหน้าเว็บ เมนูด้านข้าง และเมนู Hamburger
-// 5) Login / Forgot       : หน้าล็อกอินและหน้าลืมรหัสผ่าน (จำลอง)
+// 5) Login / Forgot       : เข้าสู่ระบบและส่งคำขอรีเซ็ตรหัสผ่าน
 // 6) Dashboard             : หน้า Home และข้อมูลสรุปตามบทบาท
 // 7) Attendance History   : หน้าประวัติการลงเวลา
 // 8) Attendance GPS       : ตรวจตำแหน่งและบันทึกเวลาเข้า-ออก (เดโมฝั่งเบราว์เซอร์)
-// 9) Other Pages          : โปรไฟล์ การแจ้งเตือน และหน้าที่ยังเป็น placeholder
+// 9) Other Pages          : โปรไฟล์ ประวัติลา รายงาน และการแจ้งเตือนจากข้อมูลจริง
 // 10) Routes              : เชื่อม URL hash กับหน้าเว็บ และตรวจบทบาทเบื้องต้น
 // 11) Register             : ส่งข้อมูลสมัครสมาชิกไปยัง API ภายนอก
 //
 // หมายเหตุความปลอดภัย: โปรเจกต์นี้ยังมีส่วนที่เป็นเดโมและเก็บข้อมูลในเบราว์เซอร์
-// ห้ามใช้ localStorage เป็นที่เก็บรหัสผ่านจริง และต้องตรวจสิทธิ์/ตำแหน่งบน backend
+// ระบบจริงตรวจสอบสิทธิ์และพิกัดที่ backend; session เก็บใน sessionStorage
 // ============================================================
 
 // ===== 1. API & SESSION =====
@@ -40,7 +40,7 @@ function table(head,rows,empty='ไม่พบข้อมูล'){const w=h('d
   rows.forEach(r=>{const row=h('tr');r.forEach(c=>{const td=h('td');td.append(c instanceof Node?c:String(c));row.append(td)});t.append(row)});w.append(t);return w}
 
 // ===== 3. AUTH: เข้าสู่ระบบ ออกจากระบบ และตรวจสิทธิ์ (เดโมเท่านั้น) =====
-// FRONTEND-ONLY DEMO AUTH. Plain-text passwords in localStorage are NOT secure; real auth must be server-side.
+// Authentication and password verification are performed by the backend.
 
 // ตรวจสอบบัญชีในข้อมูลเดโมและบันทึก session ปัจจุบัน
 async function login(email,pw){try{const data=await apiFetch('/api/login',{method:'POST',body:JSON.stringify({email:email.trim().toLowerCase(),password:pw})});sessionStorage.setItem('attendance_token',data.token);const user=normalizeUser(data.user);setCurrentUser(user);return{user}}catch(error){return{error:error.message||'เข้าสู่ระบบไม่สำเร็จ'}}}
@@ -153,47 +153,7 @@ function page_forgot(){
   finally{button.disabled=false;button.textContent='ส่งคำขอรีเซ็ตรหัสผ่าน'}
  };
 }
-// Role-aware Home. Data is read from localStorage on each render so check-in/out updates appear automatically.
-
-
-const QUOTA=10,ST={pending_supervisor:'รอหัวหน้างานอนุมัติ',pending_hr:'รอฝ่ายบุคคลอนุมัติ',approved:'อนุมัติแล้ว',rejected:'ไม่อนุมัติ',withdrawn:'ถอนคำขอแล้ว'};
-// รวมข้อมูลที่หน้า Home ต้องใช้ เช่น วันนี้ ทีม คำขอลา และสถิติ
-function getDashboardData(u){
-  const recs=getAttendanceRecords(),leaves=getLeaves(),users=getUsers().filter(x=>x.active),td=todayStr(),mine=recs.filter(r=>r.userId===u.id);
-  const d={mine,today:mine.find(r=>r.date===td),shift:getShifts()[0],loc:getWorkLocation(),myLeaves:leaves.filter(l=>l.userId===u.id),notes:getNotifications().filter(n=>n.userId===u.id)};
-  d.leaveLeft=QUOTA-d.myLeaves.filter(l=>l.status==='approved').reduce((s,l)=>s+l.days,0);
-  d.team=users.filter(x=>x.supervisorId===u.id);
-  d.teamPending=leaves.filter(l=>l.status==='pending_supervisor'&&d.team.some(t=>t.id===l.userId));
-  d.teamToday=d.team.map(t=>({t,r:recs.find(r=>r.userId===t.id&&r.date===td)}));
-  const tr=recs.filter(r=>r.date===td);d.active=users.length;d.inNow=tr.filter(r=>!r.checkOut).length;d.lateToday=tr.filter(r=>r.late).length;
-  d.pendingAll=leaves.filter(l=>l.status.startsWith('pending')).length;return d}
-const link=(href,t,cls='')=>{const a=h('a','btn '+cls,t);a.href=href;return a};
-const stat=(l,v)=>{const d=h('div','card stat');d.append(h('span',null,l),h('b',null,v));return d};
-const hours=r=>{if(!r)return'-';const ms=(r.checkOut?new Date(r.checkOut):new Date())-new Date(r.checkIn),m=Math.max(0,Math.floor(ms/60000));return`${Math.floor(m/60)} ชม. ${m%60} นาที`+(r.checkOut?'':' (กำลังนับ)')};
-async function perm(){try{return(await navigator.permissions.query({name:'geolocation'})).state}catch{return'unknown'}}
-const PT={granted:'อนุญาตแล้ว',denied:'ถูกปฏิเสธ',prompt:'ยังไม่ได้ขออนุญาต',unknown:'ไม่ทราบสถานะ'};
-// วาดการ์ดและกิจกรรมล่าสุดบนหน้า Home ตามบทบาทผู้ใช้
-async function render(u,c){const d=getDashboardData(u),t=d.today,p=await perm();let lp=null;try{lp=JSON.parse(localStorage.getItem('att2_lastpos'))}catch{}
-  const w=h('section','card');w.append(h('h1',null,`สวัสดี, ${u.name}`),h('p',null,`วันนี้ ${new Date().toLocaleDateString('th-TH-u-ca-buddhist',{dateStyle:'full'})}`),
-    h('p',null,`แผนก: ${u.dept} · กะ: ${d.shift.name} ${d.shift.start}–${d.shift.end} · สถานที่: ${d.loc.name}`));
-  const g=h('div','grid');g.append(stat('สถานะวันนี้',!t?'ยังไม่ลงชื่อ':t.checkOut?'ครบแล้ว':t.late?'เข้างาน (สาย)':'เข้างานแล้ว'),stat('เวลาเข้า',t?fmtTime(t.checkIn):'-'),stat('เวลาออก',t?.checkOut?fmtTime(t.checkOut):'-'),stat('ชั่วโมงทำงานวันนี้',hours(t)),stat('วันลาคงเหลือ',`${d.leaveLeft} / ${QUOTA} วัน`));
-  const q=h('section','card');q.append(h('h2',null,'ทางลัด'));const qr=h('div','row');
-  qr.append(link('#/attendance','ลงเวลาเข้างาน','g'),link('#/attendance','ลงเวลาออกงาน','o'),link('#/attendance-history','ประวัติการลงเวลา'),link('#/leave-request','ยื่นคำขอลา'),link('#/notifications','การแจ้งเตือน'));q.append(qr);
-  const L=h('section','card');L.append(h('h2',null,'สถานะตำแหน่ง'),h('p',null,`สิทธิ์ตำแหน่งในเบราว์เซอร์: ${PT[p]}`));
-  if(lp){const ok=lp.dist<=d.loc.radius,s=h('p',null,`ตรวจล่าสุด: ห่าง ${Math.round(lp.dist)} ม. `);s.append(badge(ok?'อยู่ในพื้นที่':'นอกพื้นที่',ok?'ok':'err'));L.append(s,h('small',null,`เมื่อ ${fmtTime(lp.at)}${lp.dev?' (ค่าจำลอง)':''}`))}
-  else L.append(h('p','msg','ยังไม่มีข้อมูลระยะ — เปิดหน้าลงเวลาเพื่อตรวจสอบ GPS'));L.append(h('p',null,`รัศมีที่อนุญาต ${d.loc.radius} เมตร`),link('#/attendance','ตรวจสอบ GPS ที่หน้าลงเวลา'));
-  const parts=[w,g,q,L];
-  if(u.role==='supervisor'){const s=h('section','card');s.append(h('h2',null,'งานของหัวหน้า'),h('p',null,`คำขอลารอคุณอนุมัติ: ${d.teamPending.length} รายการ`),
-    h('p',null,`ทีมที่ลงเวลาแล้ววันนี้: ${d.teamToday.filter(x=>x.r).length}/${d.team.length} คน`),link('#/admin-leaves','ไปหน้ารออนุมัติ'));parts.push(s)}
-  if(u.role==='admin'){const a=h('section','card');a.append(h('h2',null,'ภาพรวมหน่วยงาน'));const ag=h('div','grid');
-    ag.append(stat('พนักงานที่ใช้งาน',d.active),stat('กำลังอยู่ในที่ทำงาน',d.inNow),stat('มาสายวันนี้',d.lateToday),stat('คำขอลารออนุมัติ',d.pendingAll));
-    const ar=h('div','row');[['#/admin-users','จัดการบุคลากร'],['#/admin-attendance','ตรวจสอบการลงเวลา'],['#/admin-leaves','จัดการคำขอลา'],['#/admin-reports','รายงาน']].forEach(([x,y])=>ar.append(link(x,y)));a.append(ag,ar);parts.push(a)}
-  const ev=[...d.mine.map(r=>({at:r.checkIn,t:`ลงเวลาเข้างาน ${fmtDate(r.date)} ${fmtTime(r.checkIn)}`,href:'#/attendance-history'})),
-    ...d.myLeaves.map(l=>({at:l.submitted,t:`คำขอ${l.type} ${fmtDate(l.start)} — ${ST[l.status]}`,href:'#/leave'})),...d.notes.map(n=>({at:n.at,t:n.text,href:n.link||'#/notifications'}))].sort((a,b)=>new Date(b.at)-new Date(a.at)).slice(0,8);
-  const R=h('section','card');R.append(h('h2',null,'กิจกรรมล่าสุด'));
-  if(!ev.length)R.append(h('p','msg','ยังไม่มีกิจกรรม'));else{const ul=h('ul');ev.forEach(e=>{const li=h('li'),a=h('a',null,e.t);a.href=e.href;li.append(a);ul.append(li)});R.append(ul)}parts.push(R);
-  c.replaceChildren(...parts)}
-// เปิดหน้า Home และตั้งเวลารีเฟรชข้อมูลทุก 30 วินาที
+// หน้าหลักและข้อมูลสรุปโหลดจาก API โดยตรง ไม่มีข้อมูลตัวอย่างในเบราว์เซอร์
 async function page_dashboard(u){
  const c=document.getElementById('content');c.replaceChildren(h('p','msg','กำลังโหลดข้อมูลจริงจากระบบ...'));
  const card=(title,sub)=>{const x=h('section','card');x.append(h('h2',null,title));if(sub)x.append(h('p','msg',sub));return x};
@@ -255,7 +215,7 @@ function page_stub(u){const c=document.getElementById('content'),p=PAGE.key;c.ap
   else if(p==='notifications'){const box=h('div','card');c.append(box);const draw=()=>{const all=getNotifications(),mine=all.filter(n=>n.userId===u.id);box.replaceChildren();
     const b=h('button','btn','อ่านทั้งหมด');b.onclick=()=>{mine.forEach(n=>n.read=true);saveNotifications(all);draw()};box.append(b);
     if(!mine.length)box.append(h('p','msg','ไม่มีการแจ้งเตือน'));mine.forEach(n=>{const r=h('p',null,`${n.read?'':'● '}${n.text} — ${fmtDate(n.at)}`);if(!n.read){const m=h('button','btn','อ่านแล้ว');m.onclick=()=>{n.read=true;saveNotifications(all);draw()};r.append(' ',m)}box.append(r)})};draw()}
-  else{const m=h('div','card');m.append(h('p','msg','ต้นแบบ: หน้านี้ยังไม่ได้พัฒนาฟังก์ชันในรอบนี้ (ลิงก์ใช้งานได้ ไม่มีหน้าเสีย)'));const a=h('a','btn','กลับหน้าหลัก');a.href='#/dashboard';m.append(a);c.append(m)}}
+  else{const m=h('div','card');m.append(h('p','msg','หน้านี้ยังไม่มีข้อมูลหรือไม่รองรับการดำเนินการที่ร้องขอ'));const a=h('a','btn','กลับหน้าหลัก');a.href='#/dashboard';m.append(a);c.append(m)}}
 
 
 async function page_leave_request(u){

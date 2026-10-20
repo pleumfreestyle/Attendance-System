@@ -240,7 +240,7 @@ function page_dashboard(u){const c=document.getElementById('content');c.append(h
 
 
 // แสดงประวัติลงเวลา พร้อมตัวกรองเดือน สถานะ และวันที่
-async async function page_history(u){
+async function page_history(u){
  const out=document.getElementById('out'),mo=document.getElementById('mo'),st=document.getElementById('st'),dt=document.getElementById('dt');
  out.textContent='กำลังโหลดประวัติจากฐานข้อมูล...';
  const dayKey=value=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));

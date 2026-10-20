@@ -69,37 +69,42 @@
                 </div>
             </main>
         </template> 
-        <template id="t-register">
-            <main class="login">
-                <div class="card">
-                    <h1>
-                        สมัครสมาชิก
-                    </h1>
-                    <form id="f" novalidate>
-                        <label for="nm">ชื่อ-นามสกุล</label>
-                        <input id="nm" type="text" autocomplete="name">
-                        <label for="email">
-                            อีเมล
-                        </label>
-                        <input id="email" type="email" autocomplete="username">
-                        <label for="pw">
-                            รหัสผ่าน
-                        </label>
-                        <input id="pw" type="password" autocomplete="new-password">
-                        <label for="pw2">
-                            ยืนยันรหัสผ่าน
-                        </label>
-                        <input id="pw2" type="password" autocomplete="new-password">
-                        <p id="msg" class="msg" role="alert"></p>
-                        <button class="btn" style="width:100%">สมัครสมาชิก</button>
-                    </form>
-                    <p style="margin-top:12px">
-                        มีบัญชีแล้ว?
-                        <a href="#/login">เข้าสู่ระบบ</a>
-                    </p>
-                </div>
-            </main>
-        </template>
+        
+<template id="t-register">
+    <main class="login">
+        <div class="card">
+            <h1>สมัครสมาชิก</h1>
+
+            <form id="f" novalidate>
+                <label for="nm">ชื่อ-นามสกุล</label>
+                <input id="nm" type="text" autocomplete="name" required>
+
+                <label for="staffCode">รหัสบุคลากร</label>
+                <input id="staffCode" type="text" autocomplete="off" required>
+
+                <label for="position">ตำแหน่ง</label>
+                <input id="position" type="text" placeholder="เช่น ครู, เจ้าหน้าที่" required>
+
+                <label for="email">อีเมล</label>
+                <input id="email" type="email" autocomplete="username" required>
+
+                <label for="pw">รหัสผ่าน</label>
+                <input id="pw" type="password" autocomplete="new-password" required>
+
+                <label for="pw2">ยืนยันรหัสผ่าน</label>
+                <input id="pw2" type="password" autocomplete="new-password" required>
+
+                <p id="msg" class="msg" role="alert"></p>
+                <button class="btn" style="width:100%">สมัครสมาชิก</button>
+            </form>
+
+            <p style="margin-top:12px">
+                มีบัญชีแล้ว?
+                <a href="#/login">เข้าสู่ระบบ</a>
+            </p>
+        </div>
+    </main>
+</template>
 <template id="t-attendance">
     <div class="card">
         <p>เวลาปัจจุบัน: 

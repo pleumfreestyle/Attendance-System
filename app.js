@@ -268,15 +268,11 @@ async function page_leave_request(u){
 
 
 async function page_admin_reset_requests(){
- const c=document.getElementById('content'),card=adminCard('คำขอรีเซ็ตรหัสผ่าน','ตรวจสอบคำขอและสร้างรหัสผ่านชั่วคราว โดยต้องส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้');c.append(card);
- async function load(){card.replaceChildren(h('h2',null,'คำขอรีเซ็ตรหัสผ่าน'),h('p','msg','กำลังโหลด...'));try{const d=await apiFetch('/api/admin/password-reset-requests');card.replaceChildren(h('h2',null,'คำขอรีเซ็ตรหัสผ่าน'));const rows=(d.requests||[]).map(x=>[x.email,x.requested_at,x.status==='pending'?'รอดำเนินการ':x.status==='completed'?'ดำเนินการแล้ว':'ปฏิเสธ',x.status==='pending'?adminButton('ออก temporary password',async()=>{if(!confirm('ยืนยันว่าตรวจสอบตัวตนผู้ขอแล้ว และต้องการออก temporary password?'))return;try{const r=await apiFetch('/api/admin/password-reset',{method:'POST',body:JSON.stringify({id:x.id})});alert('รหัสผ่านชั่วคราว (แสดงครั้งเดียว):\\n\\n'+r.temporaryPassword+'\\n\\nส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้ และแนะนำให้เปลี่ยนทันที');await load()}catch(err){toast(err.message,'err')}},'btn g'):'—']);card.append(table(['อีเมล','วันที่ขอ','สถานะ','ดำเนินการ'],rows,'ไม่มีคำขอ'))}catch(err){card.replaceChildren();adminMessage(card,err.message,'err')}}await load();
-}
-
-async function page_admin_reset_requests(){
  const c=document.getElementById('content'),card=adminCard('คำขอรีเซ็ตรหัสผ่าน','ตรวจสอบคำขอและสร้างรหัสผ่านชั่วคราว ต้องส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้');c.append(card);
  async function load(){card.replaceChildren(h('h2',null,'คำขอรีเซ็ตรหัสผ่าน'),h('p','msg','กำลังโหลด...'));try{const d=await apiFetch('/api/admin/password-reset-requests');card.replaceChildren(h('h2',null,'คำขอรีเซ็ตรหัสผ่าน'));const rows=(d.requests||[]).map(x=>[x.email,x.requested_at,x.status==='pending'?'รอดำเนินการ':x.status==='completed'?'ดำเนินการแล้ว':'ปฏิเสธ',x.status==='pending'?adminButton('ออก temporary password',async()=>{if(!confirm('ยืนยันว่าตรวจสอบตัวตนผู้ขอแล้ว และต้องการออกรหัสผ่านชั่วคราว?'))return;try{const r=await apiFetch('/api/admin/password-reset',{method:'POST',body:JSON.stringify({id:x.id})});alert('รหัสผ่านชั่วคราว (แสดงครั้งเดียว):\\n\\n'+r.temporaryPassword+'\\n\\nส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้');await load()}catch(err){toast(err.message,'err')}},'btn g'):'—']);card.append(table(['อีเมล','วันที่ขอ','สถานะ','ดำเนินการ'],rows,'ไม่มีคำขอ'))}catch(err){card.replaceChildren();adminMessage(card,err.message,'err')}}await load();
 }
-\n/* ===== ADMIN PAGES: ใช้งาน Cloudflare API จริง ===== */
+
+/* ===== ADMIN PAGES: ใช้งาน Cloudflare API จริง ===== */
 function adminCard(title,description){const c=h('section','card');c.append(h('h2',null,title));if(description)c.append(h('p','msg',description));return c}
 function adminButton(label,fn,cls='btn'){const b=h('button',cls,label);b.type='button';b.onclick=fn;return b}
 function adminInput(labelText,id,type='text',value=''){const w=h('div');const l=h('label',null,labelText);l.htmlFor=id;const i=h('input');i.id=id;i.type=type;i.value=value;w.append(l,i);return {wrap:w,input:i}}

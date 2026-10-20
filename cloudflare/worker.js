@@ -365,7 +365,7 @@ export default {
         const name = String(data?.name || "").trim();
         const start = String(data?.startTime || ""), end = String(data?.endTime || "");
         const grace = Number(data?.graceMinutes ?? 0);
-        if (!name || name.length > 100 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(start) || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(end) || !Number.isInteger(grace) || grace < 0 || grace > 240) return json({ success: false, message: "กรุณาตรวจสอบชื่อกะ เวลา และเวลาผ่อนผัน" }, 400, cors);
+        if (!name || name.length > 100 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(end) || !Number.isInteger(grace) || grace < 0 || grace > 240) return json({ success: false, message: "กรุณาตรวจสอบชื่อกะ เวลา และเวลาผ่อนผัน" }, 400, cors);
         const result = await env.DB.prepare("INSERT INTO shifts (name, start_time, end_time, grace_minutes, is_active) VALUES (?, ?, ?, ?, 1)").bind(name, start, end, grace).run();
         await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "shift_created", "shift_id=" + result.meta?.last_row_id + "; name=" + name).run();
         return json({ success: true, message: "เพิ่มกะทำงานแล้ว", id: result.meta?.last_row_id }, 201, cors);
@@ -386,7 +386,7 @@ export default {
         const startDate = String(data?.startDate || "");
         const endDate = String(data?.endDate || "");
         const reason = String(data?.reason || "").trim();
-        if (!leaveType || leaveType.length > 80 || !/^\\d{4}-\\d{2}-\\d{2}$/.test(startDate) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(endDate) || endDate < startDate || reason.length > 1000) {
+        if (!leaveType || leaveType.length > 80 || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(endDate) || endDate < startDate || reason.length > 1000) {
           return json({ success: false, message: "กรุณาตรวจสอบประเภทลา วันที่ และเหตุผล" }, 400, cors);
         }
         const result = await env.DB.prepare("INSERT INTO leave_requests (personnel_id, leave_type, start_date, end_date, reason) VALUES (?, ?, ?, ?, ?)").bind(user.id, leaveType, startDate, endDate, reason || null).run();

@@ -27,7 +27,7 @@
 
 ## ข้อกำหนดก่อนนำ Worker ขึ้นใช้งานจริง
 
-**อย่านำ `cloudflare/worker.js` ไปแทน Worker ที่ใช้งานอยู่โดยตรงจนกว่าจะรวมเส้นทาง LINE เดิมเข้าด้วยกันและทดสอบครบ** เพราะ Worker ที่อยู่ใน branch นี้ยังไม่มีเส้นทาง `/webhook` และ `/test-send` เดิม การแทนที่ทันทีอาจทำให้ LINE bot หยุดทำงาน
+**เส้นทาง LINE `/webhook` และ `/test-send` ได้ถูกรวมกลับเข้า Worker ใน branch นี้แล้ว แต่ยังไม่ deploy** ต้องทดสอบ signature ของ webhook และการส่งข้อความจริงกับ LINE ก่อนแทนที่ Worker ที่ใช้งานอยู่ ห้าม deploy ทันทีโดยไม่ทดสอบ เพราะหากตั้งค่า secret หรือ Group ID ผิด LINE bot อาจหยุดทำงาน เส้นทาง `/api/db-test` ที่เปิดเผยรายชื่อตารางโดยไม่ยืนยันตัวตนไม่ได้ถูกรวมกลับมา
 
 1. สำรอง D1 ก่อนการเปลี่ยนแปลงหรือ deploy ทุกครั้ง
 2. ตรวจสอบว่า Worker ผูก D1 ด้วย binding ชื่อ `DB`
@@ -42,7 +42,7 @@
 
    เปลี่ยนอีเมลตัวอย่างเป็นอีเมลจริง และตรวจสอบว่ามีเพียงบัญชีที่ตั้งใจไว้ได้รับสิทธิ์นี้ ห้ามสร้าง endpoint สาธารณะที่ยกระดับผู้สมัครคนแรกเป็นแอดมิน
 5. ให้แอดมินปักหมุดสถานที่ทำงานจริงและตั้งรัศมีที่เหมาะสมก่อนอนุญาตให้บุคลากรลงเวลา
-6. รวม/รักษา LINE routes เดิม, ตรวจ CORS และทดสอบ login, register, GPS geofence, check-in/out, leave, admin approval, password reset และ CSV export กับบัญชีทดสอบก่อน deploy
+6. ทดสอบ LINE `/webhook` ด้วย signature ที่ถูกต้อง/ไม่ถูกต้อง และ `/test-send` ด้วย `x-admin-test-key` กับ LINE Group จริง จากนั้นตรวจ CORS และทดสอบ login, register, GPS geofence, check-in/out, leave, admin approval, password reset และ CSV export กับบัญชีทดสอบก่อน deploy
 7. ตรวจสอบว่า GitHub Pages ชี้ไปยัง branch ที่ตั้งใจใช้งาน และตรวจผลหลัง deploy
 
 ## การรีเซ็ตรหัสผ่าน

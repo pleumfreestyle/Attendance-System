@@ -104,8 +104,8 @@ function page_login(){
 
 const f=document.getElementById('f'),err=document.getElementById('err'),pw=document.getElementById('pw');
 document.getElementById('show').onchange=e=>pw.type=e.target.checked?'text':'password';
-document.getElementById('reset').onclick=()=>{if(confirm('รีเซ็ตข้อมูลตัวอย่างทั้งหมด?')){resetDemoData();toast('รีเซ็ตข้อมูลแล้ว')}};
-f.onsubmit=e=>{e.preventDefault();err.textContent='';const em=document.getElementById('email').value,p=pw.value;
+const resetButton=document.getElementById('reset');if(resetButton)resetButton.onclick=()=>{if(confirm('รีเซ็ตข้อมูลตัวอย่างทั้งหมด?')){resetDemoData();toast('รีเซ็ตข้อมูลแล้ว')}};
+f.onsubmit=e=>{e.preventDefault();err.textContent='';const em=document.getElementById('email').value.trim().toLowerCase(),p=pw.value;
   if(!/^\S+@\S+\.\S+$/.test(em))return err.textContent='กรุณากรอกอีเมลให้ถูกต้อง';if(!p)return err.textContent='กรุณากรอกรหัสผ่าน';
   const b=f.querySelector('button');b.disabled=true;b.textContent='กำลังเข้าสู่ระบบ...';
   setTimeout(()=>{const r=login(em,p);if(r.error){err.textContent=r.error;b.disabled=false;b.textContent='เข้าสู่ระบบ'}else location.href='#/dashboard'},400)};
@@ -251,7 +251,7 @@ function page_register() {
         if (!staffCode) return show('กรุณากรอกรหัสบุคลากร');
         if (!position) return show('กรุณากรอกตำแหน่ง');
         if (!email) return show('กรุณากรอกอีเมล');
-        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             return show('รูปแบบอีเมลไม่ถูกต้อง');
         }
         if (!password) return show('กรุณากรอกรหัสผ่าน');

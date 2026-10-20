@@ -186,14 +186,16 @@ function page_login(){
   };
 }
 
-// หน้าลืมรหัสผ่านแบบจำลอง — ไม่ได้ส่งอีเมลหรือรีเซ็ตรหัสผ่านจริง
+// ส่งคำขอรีเซ็ตรหัสผ่านจริงเข้าฐานข้อมูล เพื่อให้ผู้ดูแลตรวจสอบและออก temporary password
 function page_forgot(){
-// DEMO ONLY: no email is sent.
-const f=document.getElementById('f'),m=document.getElementById('msg');
-f.onsubmit=e=>{e.preventDefault();const v=document.getElementById('email').value.trim();
-  if(!/^\S+@\S+\.\S+$/.test(v)){m.style.color='#dc2626';m.textContent='กรุณากรอกอีเมลให้ถูกต้อง';return}
-  m.style.color='#166534';m.textContent='(จำลอง) หากอีเมลนี้อยู่ในระบบ จะมีลิงก์รีเซ็ตส่งไป — ระบบเดโมไม่ได้ส่งอีเมลจริง'};
-
+ const f=document.getElementById('f'),m=document.getElementById('msg'),button=f.querySelector('button');
+ f.onsubmit=async e=>{e.preventDefault();const email=document.getElementById('email').value.trim().toLowerCase();
+  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){m.style.color='#dc2626';m.textContent='กรุณากรอกอีเมลให้ถูกต้อง';return}
+  button.disabled=true;button.textContent='กำลังส่งคำขอ...';
+  try{const d=await fetch(API_BASE+'/api/password-reset-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});const result=await d.json();if(!d.ok||!result.success)throw Error(result.message||'ส่งคำขอไม่สำเร็จ');m.style.color='#166534';m.textContent=result.message;f.reset()}
+  catch(err){m.style.color='#dc2626';m.textContent=err.message||'เชื่อมต่อระบบไม่ได้ กรุณาลองใหม่'}
+  finally{button.disabled=false;button.textContent='ส่งคำขอรีเซ็ตรหัสผ่าน'}
+ };
 }
 // Role-aware Home. Data is read from localStorage on each render so check-in/out updates appear automatically.
 
@@ -313,7 +315,12 @@ async function page_leave_request(u){
  await loadMine()
 }
 
-/* ===== ADMIN PAGES: ใช้งาน Cloudflare API จริง ===== */
+
+async function page_admin_reset_requests(){
+ const c=document.getElementById('content'),card=adminCard('คำขอรีเซ็ตรหัสผ่าน','ตรวจสอบคำขอและสร้างรหัสผ่านชั่วคราว โดยต้องส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้');c.append(card);
+ async function load(){card.replaceChildren(h('h2',null,'คำขอรีเซ็ตรหัสผ่าน'),h('p','msg','กำลังโหลด...'));try{const d=await apiFetch('/api/admin/password-reset-requests');card.replaceChildren(h('h2',null,'คำขอรีเซ็ตรหัสผ่าน'));const rows=(d.requests||[]).map(x=>[x.email,x.requested_at,x.status==='pending'?'รอดำเนินการ':x.status==='completed'?'ดำเนินการแล้ว':'ปฏิเสธ',x.status==='pending'?adminButton('ออก temporary password',async()=>{if(!confirm('ยืนยันว่าตรวจสอบตัวตนผู้ขอแล้ว และต้องการออก temporary password?'))return;try{const r=await apiFetch('/api/admin/password-reset',{method:'POST',body:JSON.stringify({id:x.id})});alert('รหัสผ่านชั่วคราว (แสดงครั้งเดียว):\\n\\n'+r.temporaryPassword+'\\n\\nส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้ และแนะนำให้เปลี่ยนทันที');await load()}catch(err){toast(err.message,'err')}},'btn g'):'—']);card.append(table(['อีเมล','วันที่ขอ','สถานะ','ดำเนินการ'],rows,'ไม่มีคำขอ'))}catch(err){card.replaceChildren();adminMessage(card,err.message,'err')}}await load();
+}
+\n/* ===== ADMIN PAGES: ใช้งาน Cloudflare API จริง ===== */
 function adminCard(title,description){const c=h('section','card');c.append(h('h2',null,title));if(description)c.append(h('p','msg',description));return c}
 function adminButton(label,fn,cls='btn'){const b=h('button',cls,label);b.type='button';b.onclick=fn;return b}
 function adminInput(labelText,id,type='text',value=''){const w=h('div');const l=h('label',null,labelText);l.htmlFor=id;const i=h('input');i.id=id;i.type=type;i.value=value;w.append(l,i);return {wrap:w,input:i}}
@@ -359,7 +366,7 @@ const ROUTES={login:{title:'เข้าสู่ระบบ',fn:page_login,pub
  dashboard:{title:'หน้าหลัก',fn:page_dashboard},attendance:{title:'ลงเวลาเข้า-ออกงาน',fn:page_attendance},'attendance-history':{title:'ประวัติการลงเวลา',fn:page_history}};
 [['absence','ขาดงาน/มาสาย'],['leave','ประวัติการลา'],['work-summary','สรุปเวลาทำงาน'],['notifications','การแจ้งเตือน'],['profile','โปรไฟล์']].forEach(([k,t])=>ROUTES[k]={title:t,fn:page_stub});
 ROUTES['leave-request']={title:'ยื่นคำขอลา',fn:page_leave_request};
-[['admin-users','จัดการบุคลากร',page_admin_users],['admin-location','จัดการสถานที่ทำงาน',page_admin_location],['admin-shifts','จัดการเวลาทำงานและกะ',page_admin_shifts],['admin-attendance','ตรวจสอบการลงเวลา',page_admin_attendance],['admin-reports','รายงาน',page_admin_attendance],['admin-settings','ตั้งค่าระบบ',page_stub]].forEach(([k,t,fn])=>ROUTES[k]={title:t,fn,roles:ADM});
+[['admin-users','จัดการบุคลากร',page_admin_users],['admin-location','จัดการสถานที่ทำงาน',page_admin_location],['admin-shifts','จัดการเวลาทำงานและกะ',page_admin_shifts],['admin-attendance','ตรวจสอบการลงเวลา',page_admin_attendance],['admin-reports','รายงาน',page_stub],['admin-settings','ตั้งค่าระบบ',page_stub],['admin-password-resets','คำขอรีเซ็ตรหัสผ่าน',page_admin_reset_requests]].forEach(([k,t,fn])=>ROUTES[k]={title:t,fn,roles:ADM});
 ROUTES['admin-leaves']={title:'จัดการคำขอลา',fn:page_admin_leaves,roles:ADM};
 ROUTES.register={title:'สมัครสมาชิก',fn:page_register,pub:1};
 // Frontend-only role guard (casual). Real authorization must be enforced by a backend.
@@ -374,7 +381,7 @@ function route(){timers.splice(0).forEach(clearInterval);
  document.querySelectorAll('.side a').forEach(a=>{const on=a.getAttribute('href')===location.hash;a.classList.toggle('on',on);on?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current')});
  document.querySelector('.bell').textContent='🔔 '+getNotifications().filter(x=>x.userId===u.id&&!x.read).length;
  const c=document.getElementById('content');c.replaceChildren();const t=document.getElementById('t-'+key);if(t)c.append(t.content.cloneNode(true));r.fn(u);scrollTo(0,0)}
-addEventListener('hashchange',route);ensureSeed();route();
+addEventListener('hashchange',route);route();
 
 // ===== 11. REGISTER: สมัครสมาชิกผ่าน API =====
 // ส่งข้อมูลไปยัง Cloudflare Worker เพื่อบันทึกลงฐานข้อมูล D1

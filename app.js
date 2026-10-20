@@ -240,15 +240,15 @@ function page_dashboard(u){const c=document.getElementById('content');c.append(h
 
 
 // แสดงประวัติลงเวลา พร้อมตัวกรองเดือน สถานะ และวันที่
-async function page_history(u){
+async async function page_history(u){
  const out=document.getElementById('out'),mo=document.getElementById('mo'),st=document.getElementById('st'),dt=document.getElementById('dt');
  out.textContent='กำลังโหลดประวัติจากฐานข้อมูล...';
- const dayKey=value=>{const d=new Date(value);return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(d)};
+ const dayKey=value=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
  const dateText=key=>{const [y,m,d]=key.split('-').map(Number);return new Date(Date.UTC(y,m-1,d,12)).toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'numeric',month:'short',year:'numeric'})};
- const timeText=value=>new Date(value).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+ const timeText=value=>new Date(value).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'});
  let records=[];
  async function load(){out.replaceChildren(h('p','msg','กำลังโหลดประวัติจากฐานข้อมูล...'));try{const data=await apiFetch('/api/attendance');records=data.records||[];draw()}catch(err){out.replaceChildren();adminMessage(out,err.message,'err')}}
- function draw(){let filtered=records.filter(r=>{const day=dayKey(r.recorded_at);return(!mo.value||day.startsWith(mo.value))&&(!dt.value||day===dt.value)});const grouped=new Map();filtered.forEach(r=>{const day=dayKey(r.recorded_at);if(!grouped.has(day))grouped.set(day,{day,checkIn:null,checkOut:null,events:[]});const g=grouped.get(day);g.events.push(r);if(r.attendance_type==='check_in'&&!g.checkIn)g.checkIn=r;if(r.attendance_type==='check_out'&&!g.checkOut)g.checkOut=r});let rows=[...grouped.values()].sort((a,b)=>b.day.localeCompare(a.day)).filter(g=>!st.value||(st.value==='in'&&g.checkIn)||(st.value==='missing'&&(!g.checkIn||!g.checkOut))).map(g=>[dateText(g.day),g.checkIn?timeText(g.checkIn.recorded_at):'—',g.checkOut?timeText(g.checkOut.recorded_at):'—',g.checkIn&&g.checkOut?'ลงเวลาครบ':g.checkIn?'ยังไม่มีเวลาออก':'มีรายการเวลาออกแต่ไม่พบเวลาเข้า',g.events.length]);out.replaceChildren(table(['วันที่','เวลาเข้า','เวลาออก','สถานะ','จำนวนรายการ'],rows,'ไม่พบประวัติตามเงื่อนไข'))}
+ function draw(){let filtered=records.filter(r=>{const day=dayKey(r.recorded_at);return(!mo.value||day.startsWith(mo.value))&&(!dt.value||day===dt.value)});const grouped=new Map();filtered.forEach(r=>{const day=dayKey(r.recorded_at);if(!grouped.has(day))grouped.set(day,{day,checkIn:null,checkOut:null,events:[]});const g=grouped.get(day);g.events.push(r);if(r.attendance_type==='check_in'&&!g.checkIn)g.checkIn=r;if(r.attendance_type==='check_out'&&!g.checkOut)g.checkOut=r});const rows=[...grouped.values()].sort((a,b)=>b.day.localeCompare(a.day)).filter(g=>!st.value||(st.value==='in'&&g.checkIn)||(st.value==='missing'&&(!g.checkIn||!g.checkOut))).map(g=>[dateText(g.day),g.checkIn?timeText(g.checkIn.recorded_at):'—',g.checkOut?timeText(g.checkOut.recorded_at):'—',g.checkIn&&g.checkOut?'ลงเวลาครบ':g.checkIn?'ยังไม่มีเวลาออก':'มีรายการเวลาออกแต่ไม่พบเวลาเข้า',g.events.length]);out.replaceChildren(table(['วันที่','เวลาเข้า','เวลาออก','สถานะ','จำนวนรายการ'],rows,'ไม่พบประวัติตามเงื่อนไข'))}
  st.replaceChildren();[['','ทั้งหมด'],['in','มีเวลาเข้า'],['missing','รายการไม่ครบ']].forEach(([v,t])=>{const o=h('option',null,t);o.value=v;st.append(o)});[mo,st,dt].forEach(e=>e.oninput=draw);document.getElementById('rs').onclick=()=>{mo.value=st.value=dt.value='';draw()};await load()
 }
 

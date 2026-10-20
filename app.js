@@ -161,7 +161,7 @@ function ensureSeed() {
   if (loc && loc.lat === 13.7563 && loc.lng === 100.5018) {
     wr('location', {
       ...loc,
-      name: 'สถานที่ทำงาน',
+      name: 'วิทยาเสริมทักษะพระภิกษุสามเณร',
       lat: 14.234136593116895,
       lng: 100.57736773976643,
       radius: 500

@@ -19,64 +19,237 @@
 
 // ===== 1. STORAGE & SEED: จัดเก็บข้อมูลและสร้างข้อมูลตัวอย่าง =====
 // localStorage layer. FRONTEND-ONLY DEMO: not secure storage.
-const K='att2_';
-const rd=(k,d)=>{try{const v=localStorage.getItem(K+k);return v?JSON.parse(v):d}catch{return d}};
-const wr=(k,v)=>{try{localStorage.setItem(K+k,JSON.stringify(v));return true}catch{return false}};
+const K = 'att2_';
+
+const rd = (k, d) => {
+  try {
+    const v = localStorage.getItem(K + k);
+    return v ? JSON.parse(v) : d;
+  } catch {
+    return d;
+  }
+};
+
+const wr = (k, v) => {
+  try {
+    localStorage.setItem(K + k, JSON.stringify(v));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 // สร้างข้อมูลตัวอย่างเริ่มต้นสำหรับบัญชี กะทำงาน สถานที่ และประวัติลงเวลา
-function seed(){
-  const users=[
-   {id:'U001',name:'สมชาย ใจดี',email:'employee@example.com',password:'Employee123!',role:'employee',dept:'ฝ่ายบัญชี',position:'นักบัญชี',supervisorId:'U002',active:true},
-   {id:'U002',name:'สุดา รักงาน',email:'supervisor@example.com',password:'Supervisor123!',role:'supervisor',dept:'ฝ่ายบัญชี',position:'หัวหน้าฝ่าย',supervisorId:null,active:true},
-   {id:'U003',name:'ผู้ดูแล ระบบ',email:'admin@example.com',password:'Admin123!',role:'admin',dept:'ฝ่ายบุคคล',position:'เจ้าหน้าที่ HR',supervisorId:null,active:true}];
-  const recs=[];const now=new Date();
-  for(let i=1;i<=24;i++){const d=new Date(now);d.setDate(d.getDate()-i);if([0,6].includes(d.getDay()))continue;
-    const late=i%5===0;const ci=new Date(d);ci.setHours(8,late?50:10+(i*7)%15,0,0);const co=new Date(d);co.setHours(17,35,0,0);
-    recs.push({id:'A'+i,userId:'U001',date:d.toLocaleDateString('sv'),checkIn:ci.toISOString(),checkOut:co.toISOString(),shiftId:'S1',late,distance:120+i*9,accuracy:20});}
-  return{
-          users,records:recs,
-     shifts:[{id:'S1',name:'กะเช้า',start:'08:30',end:'17:30',grace:15,overnight:false}],
-   location: {
-    name: 'สถานที่ทำงาน',
-    lat: 14.234136593116895,
-    lng: 100.57736773976643,
-    radius: 500
-},
-   notifications:[{id:'N1',userId:'U001',text:'ยินดีต้อนรับสู่ระบบลงเวลา (ข้อมูลตัวอย่าง)',at:now.toISOString(),read:false,link:'#/dashboard'}],audit:[]};
+function seed() {
+  const users = [
+    {
+      id: 'U001',
+      name: 'สมชาย ใจดี',
+      email: 'employee@example.com',
+      password: 'Employee123!',
+      role: 'employee',
+      dept: 'ฝ่ายบัญชี',
+      position: 'นักบัญชี',
+      supervisorId: 'U002',
+      active: true
+    },
+    {
+      id: 'U002',
+      name: 'สุดา รักงาน',
+      email: 'supervisor@example.com',
+      password: 'Supervisor123!',
+      role: 'supervisor',
+      dept: 'ฝ่ายบัญชี',
+      position: 'หัวหน้าฝ่าย',
+      supervisorId: null,
+      active: true
+    },
+    {
+      id: 'U003',
+      name: 'ผู้ดูแล ระบบ',
+      email: 'admin@example.com',
+      password: 'Admin123!',
+      role: 'admin',
+      dept: 'ฝ่ายบุคคล',
+      position: 'เจ้าหน้าที่ HR',
+      supervisorId: null,
+      active: true
+    }
+  ];
+
+  const recs = [];
+  const now = new Date();
+
+  for (let i = 1; i <= 24; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+
+    // ข้ามวันเสาร์และวันอาทิตย์
+    if ([0, 6].includes(d.getDay())) continue;
+
+    const late = i % 5 === 0;
+    const ci = new Date(d);
+    ci.setHours(8, late ? 50 : 10 + (i * 7) % 15, 0, 0);
+
+    const co = new Date(d);
+    co.setHours(17, 35, 0, 0);
+
+    recs.push({
+      id: 'A' + i,
+      userId: 'U001',
+      date: d.toLocaleDateString('sv'),
+      checkIn: ci.toISOString(),
+      checkOut: co.toISOString(),
+      shiftId: 'S1',
+      late,
+      distance: 120 + i * 9,
+      accuracy: 20
+    });
+  }
+
+  return {
+    users,
+    records: recs,
+    shifts: [
+      {
+        id: 'S1',
+        name: 'กะเช้า',
+        start: '08:30',
+        end: '17:30',
+        grace: 15,
+        overnight: false
+      }
+    ],
+    location: {
+      name: 'สถานที่ทำงาน',
+      lat: 14.234136593116895,
+      lng: 100.57736773976643,
+      radius: 500
+    },
+    notifications: [
+      {
+        id: 'N1',
+        userId: 'U001',
+        text: 'ยินดีต้อนรับสู่ระบบลงเวลา (ข้อมูลตัวอย่าง)',
+        at: now.toISOString(),
+        read: false,
+        link: '#/dashboard'
+      }
+    ],
+    audit: []
+  };
 }
+
 // ตรวจว่ามีข้อมูลเริ่มต้นแล้วหรือยัง; ถ้ายังให้สร้างข้อมูลเดโม
-function ensureSeed(){
+function ensureSeed() {
   ensureLeaves();
-  if(!rd('seeded',false)){
-    const s=seed();
-    for(const k in s)wr(k,s[k]);
-    wr('seeded',true);
+
+  if (!rd('seeded', false)) {
+    const s = seed();
+
+    for (const k in s) {
+      wr(k, s[k]);
+    }
+
+    wr('seeded', true);
     return;
   }
-  // ย้ายพิกัดตัวอย่างเดิมไปยังพิกัดสถานที่ทำงานใหม่ โดยไม่ทับพิกัดที่ผู้ใช้ตั้งเอง
-  const loc=rd('location',null);
-  if(loc&&loc.lat===13.7563&&loc.lng===100.5018){
-    wr('location',{...loc,name:'สถานที่ทำงาน',lat:14.234136593116895,lng:100.57736773976643,radius:500});
+
+  // ย้ายพิกัดตัวอย่างเดิมไปยังพิกัดใหม่ โดยไม่ทับพิกัดที่ผู้ใช้ตั้งเอง
+  const loc = rd('location', null);
+
+  if (loc && loc.lat === 13.7563 && loc.lng === 100.5018) {
+    wr('location', {
+      ...loc,
+      name: 'สถานที่ทำงาน',
+      lat: 14.234136593116895,
+      lng: 100.57736773976643,
+      radius: 500
+    });
   }
 }
-const getUsers=()=>rd('users',[]);
-const getCurrentUser=()=>{const id=rd('session',null);return getUsers().find(u=>u.id===id&&u.active)||null};
-const setCurrentUser=u=>{try{u?wr('session',u.id):localStorage.removeItem(K+'session')}catch{}};
-const getAttendanceRecords=()=>rd('records',[]);
-const saveAttendanceRecord=r=>{const a=getAttendanceRecords().filter(x=>x.id!==r.id);a.push(r);return wr('records',a)};
-const getShifts=()=>rd('shifts',[]);
-const getWorkLocation=()=>rd('location',null);
-const saveWorkLocation=l=>wr('location',l);
-const getNotifications=()=>rd('notifications',[]);
-const saveNotifications=n=>wr('notifications',n);
-const getAuditLogs=()=>rd('audit',[]);
+
+const getUsers = () => rd('users', []);
+const getCurrentUser = () => {
+  const id = rd('session', null);
+  return getUsers().find(u => u.id === id && u.active) || null;
+};
+const setCurrentUser = u => {
+  try {
+    u ? wr('session', u.id) : localStorage.removeItem(K + 'session');
+  } catch {}
+};
+
+const getAttendanceRecords = () => rd('records', []);
+const saveAttendanceRecord = r => {
+  const a = getAttendanceRecords().filter(x => x.id !== r.id);
+  a.push(r);
+  return wr('records', a);
+};
+
+const getShifts = () => rd('shifts', []);
+const getWorkLocation = () => rd('location', null);
+const saveWorkLocation = l => wr('location', l);
+
+const getNotifications = () => rd('notifications', []);
+const saveNotifications = n => wr('notifications', n);
+const getAuditLogs = () => rd('audit', []);
+
 // ล้างเฉพาะรายการ localStorage ที่ขึ้นต้นด้วย att2_ แล้วสร้างข้อมูลเดโมใหม่
-function resetDemoData(){try{const ks=[];for(let i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));ks.filter(k=>k&&k.startsWith(K)).forEach(k=>localStorage.removeItem(k))}catch{}ensureSeed()}
+function resetDemoData() {
+  try {
+    const ks = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+      ks.push(localStorage.key(i));
+    }
+
+    ks
+      .filter(k => k && k.startsWith(K))
+      .forEach(k => localStorage.removeItem(k));
+  } catch {}
+
+  ensureSeed();
+}
+
 // สร้างรายการลาตัวอย่างครั้งแรก ถ้ายังไม่มีข้อมูลการลา
-function ensureLeaves(){if(rd('leaves',null)!==null)return;const d=n=>{const x=new Date();x.setDate(x.getDate()+n);return x.toLocaleDateString('sv')};
-  wr('leaves',[{id:'L1',userId:'U001',type:'ลาพักร้อน',start:d(-20),end:d(-19),days:2,submitted:d(-25),status:'approved',approver:'สุดา รักงาน'},
-   {id:'L2',userId:'U001',type:'ลากิจ',start:d(7),end:d(7),days:1,submitted:d(-1),status:'pending_supervisor',approver:'-'}])}
-const getLeaves=()=>rd('leaves',[]);
-const saveLeaves=l=>wr('leaves',l);
+function ensureLeaves() {
+  if (rd('leaves', null) !== null) return;
+
+  const d = n => {
+    const x = new Date();
+    x.setDate(x.getDate() + n);
+    return x.toLocaleDateString('sv');
+  };
+
+  wr('leaves', [
+    {
+      id: 'L1',
+      userId: 'U001',
+      type: 'ลาพักร้อน',
+      start: d(-20),
+      end: d(-19),
+      days: 2,
+      submitted: d(-25),
+      status: 'approved',
+      approver: 'สุดา รักงาน'
+    },
+    {
+      id: 'L2',
+      userId: 'U001',
+      type: 'ลากิจ',
+      start: d(7),
+      end: d(7),
+      days: 1,
+      submitted: d(-1),
+      status: 'pending_supervisor',
+      approver: '-'
+    }
+  ]);
+}
+
+const getLeaves = () => rd('leaves', []);
+const saveLeaves = l => wr('leaves', l);
 
 // ===== 2. UTILS: ฟังก์ชันช่วยใช้ซ้ำในหลายหน้า =====
 const fmtDate=s=>new Date(s).toLocaleDateString('th-TH-u-ca-buddhist',{day:'numeric',month:'short',year:'numeric'});

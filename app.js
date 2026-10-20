@@ -256,7 +256,7 @@ async function page_history(u){
 // Production must re-validate GPS, distance, and server time on a backend.
 
 // หน้าลงเวลา: แสดงแผนที่ ตรวจ GPS คำนวณระยะ และบันทึกเข้า/ออก
-async async function page_attendance(u){
+async function page_attendance(u){
  const $=id=>document.getElementById(id);let locations=[],coords=null,acc=0,map=null;
  const message=(t)=>{$('gps').textContent=t};
  T(()=>$('clk').textContent=new Date().toLocaleString('th-TH',{timeZone:'Asia/Bangkok',hour12:false}),1000);

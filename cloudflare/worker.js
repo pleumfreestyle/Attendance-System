@@ -25,7 +25,7 @@ async function hmacKey(secret) {
 async function issueToken(user, secret) {
   const now = Math.floor(Date.now() / 1000);
   const head = b64url(new TextEncoder().encode(JSON.stringify({ alg: "HS256", typ: "JWT" })));
-  const body = b64url(new TextEncoder().encode(JSON.stringify({ sub: user.id, role: user.role, iat: now, exp: now + TOKEN_TTL_SECONDS })));
+  const body = b64url(new TextEncoder().encode(JSON.stringify({ sub: user.id, role: user.role, ver: Number(user.token_version || 0), iat: now, exp: now + TOKEN_TTL_SECONDS })));
   const input = head + "." + body;
   const sig = await crypto.subtle.sign("HMAC", await hmacKey(secret), new TextEncoder().encode(input));
   return input + "." + b64url(new Uint8Array(sig));
@@ -41,7 +41,7 @@ async function readToken(request, env) {
     if (!ok) return null;
     const payload = JSON.parse(new TextDecoder().decode(fromB64url(parts[1])));
     if (!payload.sub || !payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) return null;
-    const user = await env.DB.prepare("SELECT id, staff_code, full_name, email, position, role, is_active FROM personnel WHERE id = ?").bind(payload.sub).first();
+    const user = await env.DB.prepare("SELECT id, staff_code, full_name, email, position, role, is_active, token_version FROM personnel WHERE id = ?").bind(payload.sub).first();
     if (!user || !user.is_active) return null;
     return user;
   } catch {
@@ -136,7 +136,7 @@ export default {
         const email = String(data?.email || "").trim().toLowerCase();
         const password = String(data?.password || "");
         if (!email || !password) return json({ success: false, message: "กรุณากรอกอีเมลและรหัสผ่าน" }, 400, cors);
-        const user = await env.DB.prepare("SELECT id, staff_code, full_name, email, position, password_hash, role, is_active FROM personnel WHERE email = ? COLLATE NOCASE").bind(email).first();
+        const user = await env.DB.prepare("SELECT id, staff_code, full_name, email, position, password_hash, role, is_active, token_version FROM personnel WHERE email = ? COLLATE NOCASE").bind(email).first();
         if (!user || !(await verifyPassword(password, user.password_hash))) return json({ success: false, message: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }, 401, cors);
         if (!user.is_active) return json({ success: false, message: "บัญชียังไม่ได้รับอนุมัติหรือถูกระงับ กรุณาติดต่อผู้ดูแล" }, 403, cors);
         const token = await issueToken(user, env.JWT_SECRET);
@@ -157,7 +157,7 @@ export default {
         const iterations = 210000, salt = crypto.getRandomValues(new Uint8Array(16));
         const hash = await passwordHash(newPassword, salt, iterations);
         const stored = "pbkdf2$" + iterations + "$" + base64(salt) + "$" + base64(hash);
-        await env.DB.prepare("UPDATE personnel SET password_hash = ? WHERE id = ?").bind(stored, user.id).run();
+        await env.DB.prepare("UPDATE personnel SET password_hash = ?, token_version = token_version + 1 WHERE id = ?").bind(stored, user.id).run();
         await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "password_changed", "self_service").run();
         return json({ success: true, message: "เปลี่ยนรหัสผ่านแล้ว" }, 200, cors);
       }
@@ -199,7 +199,7 @@ export default {
         const iterations = 210000, salt = crypto.getRandomValues(new Uint8Array(16));
         const hash = await passwordHash(tempPassword, salt, iterations);
         const stored = "pbkdf2$" + iterations + "$" + base64(salt) + "$" + base64(hash);
-        await env.DB.prepare("UPDATE personnel SET password_hash = ? WHERE id = ?").bind(stored, person.id).run();
+        await env.DB.prepare("UPDATE personnel SET password_hash = ?, token_version = token_version + 1 WHERE id = ?").bind(stored, person.id).run();
         await env.DB.prepare("UPDATE password_reset_requests SET status = 'completed', processed_by = ?, processed_at = datetime('now') WHERE id = ? AND status = 'pending'").bind(user.id, id).run();
         await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "password_reset_admin", "request_id=" + id + "; personnel_id=" + person.id).run();
         return json({ success: true, message: "ออก temporary password แล้ว โปรดส่งให้เจ้าของบัญชีผ่านช่องทางที่ยืนยันตัวตนได้ และให้เปลี่ยนทันทีหลังเข้าสู่ระบบ", temporaryPassword: tempPassword }, 200, cors);
@@ -313,7 +313,7 @@ export default {
         return json({ success: true, shifts: rows.results || [] }, 200, cors);
       }
 
-      if (url.pathname === "/api/admin/shifts" && request.method === "POST") {
+      if (url.pathname === "/api/admin/shifts" && request.method === "PATCH") {\n        const user = await readToken(request, env);\n        if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);\n        if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);\n        const data = await body(), id = Number(data?.id), active = data?.active;\n        if (!Number.isInteger(id) || id < 1 || typeof active !== "boolean") return json({ success: false, message: "ข้อมูลกะทำงานไม่ถูกต้อง" }, 400, cors);\n        const result = await env.DB.prepare("UPDATE shifts SET is_active = ? WHERE id = ?").bind(active ? 1 : 0, id).run();\n        if (!result.meta?.changes) return json({ success: false, message: "ไม่พบกะทำงาน" }, 404, cors);\n        await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "shift_status_changed", "shift_id=" + id + "; active=" + active).run();\n        return json({ success: true, message: active ? "เปิดใช้งานกะแล้ว" : "ปิดใช้งานกะแล้ว" }, 200, cors);\n      }\n\n      if (url.pathname === "/api/admin/shifts" && request.method === "POST") {
         const user = await readToken(request, env);
         if (!user) return json({ success: false, message: "กรุณาเข้าสู่ระบบ" }, 401, cors);
         if (user.role !== "admin") return json({ success: false, message: "ไม่มีสิทธิ์ดำเนินการ" }, 403, cors);

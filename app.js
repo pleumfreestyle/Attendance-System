@@ -225,37 +225,75 @@ function route(){timers.splice(0).forEach(clearInterval);
  const c=document.getElementById('content');c.replaceChildren();const t=document.getElementById('t-'+key);if(t)c.append(t.content.cloneNode(true));r.fn(u);scrollTo(0,0)}
 addEventListener('hashchange',route);ensureSeed();route();
 
-// สมัครสมาชิก (เดโม): เก็บรหัสผ่านแบบข้อความธรรมดาใน localStorage — ไม่ปลอดภัย ใช้เพื่อทดสอบเท่านั้น
+// สมัครสมาชิก: ส่งข้อมูลไปยัง Cloudflare Worker เพื่อบันทึกลง D1
 function page_register() {
     const $ = id => document.getElementById(id);
-    const form = $('f'), msg = $('msg');
-    const show = (t, type = 'err') => { msg.textContent = t; msg.className = 'msg ' + type; };
+    const form = $('f');
+    const msg = $('msg');
+    const button = form.querySelector('button');
 
-    form.onsubmit = e => {
+    const show = (text, type = 'err') => {
+        msg.textContent = text;
+        msg.className = 'msg ' + type;
+    };
+
+    form.onsubmit = async e => {
         e.preventDefault();
-        const name = $('nm').value.trim();
+
+        const fullName = $('nm').value.trim();
+        const staffCode = $('staffCode').value.trim();
+        const position = $('position').value.trim();
         const email = $('email').value.trim().toLowerCase();
-        const pw = $('pw').value, pw2 = $('pw2').value;
+        const password = $('pw').value;
+        const password2 = $('pw2').value;
 
-        if (!name) return show('กรุณากรอกชื่อ-นามสกุล');
+        if (!fullName) return show('กรุณากรอกชื่อ-นามสกุล');
+        if (!staffCode) return show('กรุณากรอกรหัสบุคลากร');
+        if (!position) return show('กรุณากรอกตำแหน่ง');
         if (!email) return show('กรุณากรอกอีเมล');
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return show('รูปแบบอีเมลไม่ถูกต้อง');
-        if (!pw) return show('กรุณากรอกรหัสผ่าน');
-        if (pw.length < 8) return show('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร');
-        if (pw !== pw2) return show('รหัสผ่านทั้งสองช่องไม่ตรงกัน');
+        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+            return show('รูปแบบอีเมลไม่ถูกต้อง');
+        }
+        if (!password) return show('กรุณากรอกรหัสผ่าน');
+        if (password.length < 8 || password.length > 128) {
+            return show('รหัสผ่านต้องมีความยาว 8–128 ตัวอักษร');
+        }
+        if (password !== password2) {
+            return show('รหัสผ่านทั้งสองช่องไม่ตรงกัน');
+        }
 
-        // ใช้ชั้นเก็บข้อมูลเดียวกับการล็อกอิน (getUsers/wr) เพื่อให้บัญชีใหม่ล็อกอินได้
-        const users = getUsers();
-        if (users.some(u => u.email.toLowerCase() === email)) return show('อีเมลนี้ถูกสมัครสมาชิกแล้ว');
+        if (button) button.disabled = true;
+        show('กำลังส่งข้อมูลสมัครสมาชิก...', 'ok');
 
-        users.push({
-            id: 'U' + Date.now(), name, email, password: pw, role: 'employee',
-            dept: 'ยังไม่ระบุ', position: 'พนักงาน', supervisorId: null, active: true
-        });
-        if (!wr('users', users)) return show('ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่');
+        try {
+            const response = await fetch(
+                'https://school-attendance-api.projectcsemn.workers.dev/api/register',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fullName, staffCode, position, email, password })
+                }
+            );
 
-        form.reset();
-        show('สมัครสมาชิกสำเร็จ! กำลังไปหน้าเข้าสู่ระบบ', 'ok');
-        setTimeout(() => { if (location.hash === '#/register') location.hash = '#/login'; }, 1200);
+            let result;
+            try {
+                result = await response.json();
+            } catch {
+                throw new Error('เซิร์ฟเวอร์ตอบกลับในรูปแบบที่อ่านไม่ได้');
+            }
+
+            if (!response.ok || !result.success) {
+                show(result.message || `สมัครสมาชิกไม่สำเร็จ (HTTP ${response.status})`);
+                return;
+            }
+
+            form.reset();
+            show(result.message || 'ส่งข้อมูลสมัครสมาชิกแล้ว กรุณารอผู้ดูแลอนุมัติบัญชี', 'ok');
+        } catch (error) {
+            console.error('Register error:', error);
+            show('เชื่อมต่อระบบสมัครสมาชิกไม่ได้ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่');
+        } finally {
+            if (button) button.disabled = false;
+        }
     };
 }

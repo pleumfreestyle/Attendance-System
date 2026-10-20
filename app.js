@@ -100,17 +100,60 @@ function buildLayout(user){
 
 // ===== Pages =====
 function page_login(){
+  const f=document.getElementById('f');
+  const err=document.getElementById('err');
+  const pw=document.getElementById('pw');
+  const email=document.getElementById('email');
+  const show=document.getElementById('show');
+  if(!f||!err||!pw||!email){
+    console.error('Login form is missing required elements');
+    return;
+  }
+  if(show)show.onchange=e=>pw.type=e.target.checked?'text':'password';
 
+  // The reset button is optional on the login page; never let its absence
+  // stop the login form from receiving its submit handler.
+  const resetButton=document.getElementById('reset');
+  if(resetButton)resetButton.onclick=()=>{
+    if(confirm('รีเซ็ตข้อมูลตัวอย่างทั้งหมด?')){
+      resetDemoData();
+      toast('รีเซ็ตข้อมูลแล้ว');
+    }
+  };
 
-const f=document.getElementById('f'),err=document.getElementById('err'),pw=document.getElementById('pw');
-document.getElementById('show').onchange=e=>pw.type=e.target.checked?'text':'password';
-const resetButton=document.getElementById('reset');if(resetButton)resetButton.onclick=()=>{if(confirm('รีเซ็ตข้อมูลตัวอย่างทั้งหมด?')){resetDemoData();toast('รีเซ็ตข้อมูลแล้ว')}};
-f.onsubmit=e=>{e.preventDefault();err.textContent='';const em=document.getElementById('email').value.trim().toLowerCase(),p=pw.value;
-  if(!/^\S+@\S+\.\S+$/.test(em))return err.textContent='กรุณากรอกอีเมลให้ถูกต้อง';if(!p)return err.textContent='กรุณากรอกรหัสผ่าน';
-  const b=f.querySelector('button');b.disabled=true;b.textContent='กำลังเข้าสู่ระบบ...';
-  setTimeout(()=>{const r=login(em,p);if(r.error){err.textContent=r.error;b.disabled=false;b.textContent='เข้าสู่ระบบ'}else location.href='#/dashboard'},400)};
-
+  f.onsubmit=async e=>{
+    e.preventDefault();
+    err.textContent='';
+    const em=email.value.trim().toLowerCase();
+    const p=pw.value;
+    if(!/^\S+@\S+\.\S+$/.test(em)){
+      err.textContent='กรุณากรอกอีเมลให้ถูกต้อง';
+      return;
+    }
+    if(!p){
+      err.textContent='กรุณากรอกรหัสผ่าน';
+      return;
+    }
+    const b=f.querySelector('button[type="submit"]')||f.querySelector('button');
+    const originalText=b?b.textContent:'เข้าสู่ระบบ';
+    if(b){b.disabled=true;b.textContent='กำลังเข้าสู่ระบบ...';}
+    try{
+      const result=login(em,p);
+      if(result.error){
+        err.textContent=result.error;
+        return;
+      }
+      location.hash='#/dashboard';
+      route();
+    }catch(error){
+      console.error('Login error:',error);
+      err.textContent='เกิดข้อผิดพลาดระหว่างเข้าสู่ระบบ กรุณาลองใหม่';
+    }finally{
+      if(b){b.disabled=false;b.textContent=originalText;}
+    }
+  };
 }
+
 function page_forgot(){
 // DEMO ONLY: no email is sent.
 const f=document.getElementById('f'),m=document.getElementById('msg');

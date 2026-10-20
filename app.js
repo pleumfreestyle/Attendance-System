@@ -240,40 +240,40 @@ function page_dashboard(u){const c=document.getElementById('content');c.append(h
 
 
 // แสดงประวัติลงเวลา พร้อมตัวกรองเดือน สถานะ และวันที่
-function page_history(u){const out=document.getElementById('out'),mo=document.getElementById('mo'),st=document.getElementById('st'),dt=document.getElementById('dt');
-  const draw=()=>{let r=getAttendanceRecords().filter(x=>x.userId===u.id);if(mo.value)r=r.filter(x=>x.date.startsWith(mo.value));if(dt.value)r=r.filter(x=>x.date===dt.value);
-    if(st.value)r=r.filter(x=>st.value==='late'?x.late:!x.late);r.sort((a,b)=>b.date.localeCompare(a.date));
-    out.replaceChildren(table(['วันที่','กะ','เข้า','ออก','สถานะ','ระยะ (ม.)'],r.slice(0,50).map(x=>[fmtDate(x.date),x.shiftId,fmtTime(x.checkIn),fmtTime(x.checkOut),x.late?badge('สาย','warn'):badge('ตรงเวลา','ok'),Math.round(x.distance)]),'ไม่พบประวัติตามเงื่อนไข'))};
-  [mo,st,dt].forEach(e=>e.oninput=draw);document.getElementById('rs').onclick=()=>{mo.value=st.value=dt.value='';draw()};draw()}
+async function page_history(u){
+ const out=document.getElementById('out'),mo=document.getElementById('mo'),st=document.getElementById('st'),dt=document.getElementById('dt');
+ out.textContent='กำลังโหลดประวัติจากฐานข้อมูล...';
+ const dayKey=value=>{const d=new Date(value);return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(d)};
+ const dateText=key=>{const [y,m,d]=key.split('-').map(Number);return new Date(Date.UTC(y,m-1,d,12)).toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'numeric',month:'short',year:'numeric'})};
+ const timeText=value=>new Date(value).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+ let records=[];
+ async function load(){out.replaceChildren(h('p','msg','กำลังโหลดประวัติจากฐานข้อมูล...'));try{const data=await apiFetch('/api/attendance');records=data.records||[];draw()}catch(err){out.replaceChildren();adminMessage(out,err.message,'err')}}
+ function draw(){let filtered=records.filter(r=>{const day=dayKey(r.recorded_at);return(!mo.value||day.startsWith(mo.value))&&(!dt.value||day===dt.value)});const grouped=new Map();filtered.forEach(r=>{const day=dayKey(r.recorded_at);if(!grouped.has(day))grouped.set(day,{day,checkIn:null,checkOut:null,events:[]});const g=grouped.get(day);g.events.push(r);if(r.attendance_type==='check_in'&&!g.checkIn)g.checkIn=r;if(r.attendance_type==='check_out'&&!g.checkOut)g.checkOut=r});let rows=[...grouped.values()].sort((a,b)=>b.day.localeCompare(a.day)).filter(g=>!st.value||(st.value==='in'&&g.checkIn)||(st.value==='missing'&&(!g.checkIn||!g.checkOut))).map(g=>[dateText(g.day),g.checkIn?timeText(g.checkIn.recorded_at):'—',g.checkOut?timeText(g.checkOut.recorded_at):'—',g.checkIn&&g.checkOut?'ลงเวลาครบ':g.checkIn?'ยังไม่มีเวลาออก':'มีรายการเวลาออกแต่ไม่พบเวลาเข้า',g.events.length]);out.replaceChildren(table(['วันที่','เวลาเข้า','เวลาออก','สถานะ','จำนวนรายการ'],rows,'ไม่พบประวัติตามเงื่อนไข'))}
+ st.replaceChildren();[['','ทั้งหมด'],['in','มีเวลาเข้า'],['missing','รายการไม่ครบ']].forEach(([v,t])=>{const o=h('option',null,t);o.value=v;st.append(o)});[mo,st,dt].forEach(e=>e.oninput=draw);document.getElementById('rs').onclick=()=>{mo.value=st.value=dt.value='';draw()};await load()
+}
 
 // PROTOTYPE ONLY: distance checks here run in the browser and can be bypassed.
 // Production must re-validate GPS, distance, and server time on a backend.
 
 // หน้าลงเวลา: แสดงแผนที่ ตรวจ GPS คำนวณระยะ และบันทึกเข้า/ออก
-function page_attendance(u){const $=id=>document.getElementById(id),loc=getWorkLocation(),shift=getShifts()[0];let pos=null,dist=null,map,me;
-  $('wp').textContent=`${loc.name} (${loc.lat}, ${loc.lng}) รัศมี ${loc.radius} ม.`;$('sh').textContent=`${shift.name} ${shift.start}–${shift.end}`;
-  T(()=>$('clk').textContent=new Date().toLocaleString('th-TH-u-ca-buddhist'),1000);
-  if(window.L){map=L.map('map').setView([loc.lat,loc.lng],14);L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
-    L.marker([loc.lat,loc.lng]).addTo(map).bindPopup('สถานที่ทำงาน');L.circle([loc.lat,loc.lng],{radius:loc.radius}).addTo(map)}else $('map').textContent='ไม่สามารถโหลดแผนที่ได้ (ต้องใช้อินเทอร์เน็ต)';
-  const today=()=>getAttendanceRecords().find(r=>r.userId===u.id&&r.date===todayStr());
-  function ui(){const t=today(),ok=dist!=null&&dist<=loc.radius;
-    $('ci').disabled=!(ok&&!t);$('co').disabled=!(ok&&t&&!t.checkOut);
-    $('stt').textContent=!t?'ยังไม่ได้ลงชื่อเข้างาน':t.checkOut?`ครบแล้ว (เข้า ${fmtTime(t.checkIn)} ออก ${fmtTime(t.checkOut)})`:`เข้างานแล้ว ${fmtTime(t.checkIn)}`;
-    $('dist').textContent=dist==null?'-':`${Math.round(dist)} เมตร`+(ok?' (อยู่ในพื้นที่)':` — อยู่นอกพื้นที่ ต้องอยู่ภายใน ${loc.radius} เมตร`)}
-  function got(p,dev){pos={lat:p.latitude,lng:p.longitude,acc:p.accuracy};dist=haversine(pos.lat,pos.lng,loc.lat,loc.lng);try{localStorage.setItem("att2_lastpos",JSON.stringify({dist,acc:pos.acc,at:Date.now(),dev:!!dev}))}catch{}
-    $('gps').textContent='ได้รับตำแหน่งแล้ว'+(dev?' (โหมดจำลองสำหรับพัฒนา)':'');$('acc').textContent=`±${Math.round(pos.acc)} เมตร`;
-    if(map){me&&me.remove();me=L.marker([pos.lat,pos.lng]).addTo(map).bindPopup('ตำแหน่งของคุณ')}ui()}
-  function refresh(){dist=null;ui();const m=$('dev').value;
-    if(m==='in')return got({latitude:loc.lat+.002,longitude:loc.lng,accuracy:15},true);
-    if(m==='out')return got({latitude:loc.lat+.03,longitude:loc.lng,accuracy:15},true);
-    if(!navigator.geolocation){$('gps').textContent='เบราว์เซอร์ไม่รองรับ GPS';return}
-    $('gps').textContent='กำลังค้นหาตำแหน่ง...';
-    navigator.geolocation.getCurrentPosition(p=>got(p.coords),e=>{$('gps').textContent=e.code===1?'ถูกปฏิเสธสิทธิ์ตำแหน่ง: กดไอคอนกุญแจข้าง URL > อนุญาต "ตำแหน่ง" แล้วกดรีเฟรชตำแหน่ง':e.code===3?'หมดเวลาค้นหาตำแหน่ง กรุณากดลองใหม่':'ไม่พบตำแหน่ง กรุณากดลองใหม่'},{enableHighAccuracy:true,timeout:10000,maximumAge:0})}
-  function act(kind){if(dist==null||dist>loc.radius)return toast('อยู่นอกพื้นที่ปฏิบัติงาน','err');const t=today(),now=new Date();
-    if(kind==='in'){if(t)return toast('ลงชื่อเข้างานแล้ว','warn');const[hh,mm]=shift.start.split(':').map(Number),lim=new Date(now);lim.setHours(hh,mm+shift.grace,0,0);
-      const saved=saveAttendanceRecord({id:'A'+Date.now(),userId:u.id,date:todayStr(),checkIn:now.toISOString(),checkOut:null,shiftId:shift.id,late:now>lim,distance:dist,accuracy:pos.acc});if(!saved)return toast('บันทึกข้อมูลไม่สำเร็จ พื้นที่จัดเก็บในเบราว์เซอร์อาจเต็มหรือถูกปิดใช้งาน','err');toast('ลงชื่อเข้างานสำเร็จ')}
-    else{if(!t)return toast('ต้องลงชื่อเข้างานก่อน','err');if(t.checkOut)return toast('ลงชื่อออกงานแล้ว','warn');const previousCheckOut=t.checkOut;t.checkOut=now.toISOString();if(!saveAttendanceRecord(t)){t.checkOut=previousCheckOut;return toast('บันทึกข้อมูลไม่สำเร็จ พื้นที่จัดเก็บในเบราว์เซอร์อาจเต็มหรือถูกปิดใช้งาน','err')}toast('ลงชื่อออกงานสำเร็จ')}ui()}
-  $('ci').onclick=()=>act('in');$('co').onclick=()=>act('out');$('rf').onclick=refresh;$('dev').onchange=refresh;ui();refresh()}
+async function page_attendance(u){
+ const $=id=>document.getElementById(id);let locations=[],position=null,accuracy=null,me=null,markers=[];
+ const say=(text,kind='')=>{const gps=$('gps');gps.textContent=text;gps.className=kind};
+ $('clk').textContent='กำลังโหลด...';$('sh').textContent='ตรวจสอบกะทำงาน';$('wp').textContent='กำลังโหลดสถานที่...';$('stt').textContent='กำลังตรวจสอบประวัติ';
+ T(()=>$('clk').textContent=new Date().toLocaleString('th-TH',{timeZone:'Asia/Bangkok',hour12:false}),1000);
+ $('dev')?.closest('label')?.remove();$('dev')?.remove();
+ $('ci').disabled=true;$('co').disabled=true;
+ let map=null;
+ if(window.L){map=L.map('map').setView([15.87,100.99],6);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map)}else $('map').textContent='ไม่สามารถโหลดแผนที่ได้ กรุณาตรวจสอบอินเทอร์เน็ต';
+ function meters(lat1,lon1,lat2,lon2){const rad=x=>x*Math.PI/180;const dLat=rad(lat2-lat1),dLon=rad(lon2-lon1),a=Math.sin(dLat/2)**2+Math.cos(rad(lat1))*Math.cos(rad(lat2))*Math.sin(dLon/2)**2;return 6371000*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))}
+ function activeLocation(){if(!position||!locations.length)return null;return locations.map(l=>({...l,distance:meters(position.latitude,position.longitude,l.latitude,l.longitude)})).sort((a,b)=>a.distance-b.distance)[0]}
+ async function refreshStatus(){try{const data=await apiFetch('/api/attendance');const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());const today=(data.records||[]).filter(r=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(r.recorded_at))===day);const ci=today.find(r=>r.attendance_type==='check_in'),co=today.find(r=>r.attendance_type==='check_out');$('stt').textContent=!ci?'ยังไม่ได้ลงชื่อเข้างาน':co?'ลงเวลาครบแล้ว (เข้า '+new Date(ci.recorded_at).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})+' · ออก '+new Date(co.recorded_at).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})+')':'ลงชื่อเข้างานแล้ว '+new Date(ci.recorded_at).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'});$('ci').disabled=!!ci||!position;$('co').disabled=!ci||!!co||!position}catch(e){$('stt').textContent=e.message;$('ci').disabled=true;$('co').disabled=true}}
+ function updatePosition(coords){position={latitude:coords.latitude,longitude:coords.longitude};accuracy=coords.accuracy;const nearest=activeLocation();$('acc').textContent='±'+Math.round(accuracy)+' เมตร';if(!nearest){$('dist').textContent='—';return}const allowed=nearest.distance<=nearest.radius_meters;$('dist').textContent=Math.round(nearest.distance)+' เมตร'+(allowed?' (อยู่ในรัศมี)':' (อยู่นอกพื้นที่)');say(allowed?'ได้รับตำแหน่งแล้ว อยู่ในพื้นที่':'ได้รับตำแหน่งแล้ว แต่อยู่นอกพื้นที่',allowed?'ok':'err');if(map){if(me)me.remove();me=L.marker([position.latitude,position.longitude]).addTo(map).bindPopup('ตำแหน่งปัจจุบัน');map.setView([position.latitude,position.longitude],15)}refreshStatus()}
+ function refresh(){position=null;$('dist').textContent='—';$('acc').textContent='—';$('ci').disabled=true;$('co').disabled=true;if(!navigator.geolocation){say('เบราว์เซอร์ไม่รองรับ GPS','err');return}say('กำลังค้นหาตำแหน่ง GPS...');navigator.geolocation.getCurrentPosition(p=>updatePosition(p.coords),e=>{const msg=e.code===1?'ถูกปฏิเสธสิทธิ์ตำแหน่ง กรุณาอนุญาต Location ในเบราว์เซอร์':e.code===3?'หมดเวลาค้นหาตำแหน่ง กรุณาลองใหม่':'ไม่สามารถอ่านตำแหน่งได้ กรุณาตรวจสอบ GPS';say(msg,'err')},{enableHighAccuracy:true,timeout:15000,maximumAge:0})}
+ async function act(type){if(!position)return toast('กรุณาอ่านตำแหน่ง GPS ก่อน','err');if(accuracy>100)return toast('ความแม่นยำ GPS ต่ำเกินไป (±'+Math.round(accuracy)+' เมตร) กรุณาลองใหม่ในพื้นที่เปิดโล่ง','err');const b=type==='check_in'?$('ci'):$('co');b.disabled=true;try{const result=await apiFetch('/api/attendance',{method:'POST',body:JSON.stringify({type,latitude:position.latitude,longitude:position.longitude,accuracy})});toast(result.message);await refreshStatus()}catch(e){toast(e.message,'err');await refreshStatus()}finally{b.disabled=false;refreshStatus()}}
+ $('ci').onclick=()=>act('check_in');$('co').onclick=()=>act('check_out');$('rf').onclick=refresh;
+ try{const [locationData,shiftData]=await Promise.all([apiFetch('/api/work-location'),apiFetch('/api/admin/shifts').catch(()=>({shifts:[]}))]);locations=locationData.locations||[];if(!locations.length)throw new Error('ยังไม่มีการตั้งค่าสถานที่ทำงาน กรุณาติดต่อแอดมิน');$('wp').textContent=locations.map(l=>l.name+' (รัศมี '+l.radius_meters+' ม.)').join(' · ');const shift=(shiftData.shifts||[]).find(x=>x.is_active);$('sh').textContent=shift?shift.name+' '+shift.start_time+'–'+shift.end_time:'ยังไม่ได้ตั้งค่ากะงาน';if(map){locations.forEach(l=>{const marker=L.marker([l.latitude,l.longitude]).addTo(map).bindPopup(l.name+' · รัศมี '+l.radius_meters+' เมตร');markers.push(marker);L.circle([l.latitude,l.longitude],{radius:l.radius_meters}).addTo(map)});if(locations.length===1)map.setView([locations[0].latitude,locations[0].longitude],15);else map.fitBounds(L.featureGroup(markers).getBounds().pad(.15))}await refreshStatus();refresh()}catch(e){say(e.message,'err');$('wp').textContent=e.message;$('ci').disabled=true;$('co').disabled=true}
+}
 
 // Generic page: real profile (read-only) and notifications; other pages are labeled placeholders.
 

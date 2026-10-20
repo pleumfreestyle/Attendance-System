@@ -431,6 +431,12 @@ export default {
         const id = Number(data?.id), role = data?.role;
         if (!Number.isInteger(id) || id < 1 || !["staff", "supervisor", "admin"].includes(role)) return json({ success: false, message: "บทบาทที่เลือกไม่ถูกต้อง" }, 400, cors);
         if (id === Number(user.id) && role !== "admin") return json({ success: false, message: "ไม่สามารถลดสิทธิ์บัญชีที่กำลังใช้งานอยู่ได้" }, 400, cors);
+        const target = await env.DB.prepare("SELECT role FROM personnel WHERE id = ?").bind(id).first();
+        if (!target) return json({ success: false, message: "ไม่พบบัญชีบุคลากร" }, 404, cors);
+        if (target.role === "admin" && role !== "admin") {
+          const admins = await env.DB.prepare("SELECT COUNT(*) AS count FROM personnel WHERE role = 'admin' AND is_active = 1").first();
+          if (Number(admins?.count || 0) <= 1) return json({ success: false, message: "ต้องมีแอดมินที่ใช้งานได้อย่างน้อยหนึ่งบัญชี" }, 409, cors);
+        }
         const result = await env.DB.prepare("UPDATE personnel SET role = ? WHERE id = ?").bind(role, id).run();
         if (!result.meta?.changes) return json({ success: false, message: "ไม่พบบัญชีบุคลากร" }, 404, cors);
         await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, "personnel_role_changed", "personnel_id=" + id + "; role=" + role).run();
@@ -446,6 +452,14 @@ export default {
         const active = data?.active;
         if (!Number.isInteger(id) || id < 1 || typeof active !== "boolean") return json({ success: false, message: "ข้อมูลอนุมัติไม่ถูกต้อง" }, 400, cors);
         if (id === Number(user.id) && !active) return json({ success: false, message: "ไม่สามารถระงับบัญชีแอดมินที่กำลังใช้งานอยู่ได้" }, 400, cors);
+        if (!active) {
+          const target = await env.DB.prepare("SELECT role, is_active FROM personnel WHERE id = ?").bind(id).first();
+          if (!target) return json({ success: false, message: "ไม่พบบัญชีบุคลากร" }, 404, cors);
+          if (target.role === "admin" && target.is_active) {
+            const admins = await env.DB.prepare("SELECT COUNT(*) AS count FROM personnel WHERE role = 'admin' AND is_active = 1").first();
+            if (Number(admins?.count || 0) <= 1) return json({ success: false, message: "ต้องมีแอดมินที่ใช้งานได้อย่างน้อยหนึ่งบัญชี" }, 409, cors);
+          }
+        }
         const result = await env.DB.prepare("UPDATE personnel SET is_active = ? WHERE id = ?").bind(active ? 1 : 0, id).run();
         if (!result.meta?.changes) return json({ success: false, message: "ไม่พบบัญชีบุคลากร" }, 404, cors);
         await env.DB.prepare("INSERT INTO audit_logs (personnel_id, action, details) VALUES (?, ?, ?)").bind(user.id, active ? "personnel_approved" : "personnel_suspended", "personnel_id=" + id).run();

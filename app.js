@@ -236,9 +236,27 @@ async function render(u,c){const d=getDashboardData(u),t=d.today,p=await perm();
   if(!ev.length)R.append(h('p','msg','ยังไม่มีกิจกรรม'));else{const ul=h('ul');ev.forEach(e=>{const li=h('li'),a=h('a',null,e.t);a.href=e.href;li.append(a);ul.append(li)});R.append(ul)}parts.push(R);
   c.replaceChildren(...parts)}
 // เปิดหน้า Home และตั้งเวลารีเฟรชข้อมูลทุก 30 วินาที
-function page_dashboard(u){const c=document.getElementById('content');c.append(h('p','msg','กำลังโหลด...'));render(u,c);T(()=>render(u,c),30000)}
-
-
+async function page_dashboard(u){
+ const c=document.getElementById('content');c.replaceChildren(h('p','msg','กำลังโหลดข้อมูลจริงจากระบบ...'));
+ const card=(title,sub)=>{const x=h('section','card');x.append(h('h2',null,title));if(sub)x.append(h('p','msg',sub));return x};
+ try{
+  const data=await apiFetch('/api/attendance');const records=data.records||[];
+  const dayKey=x=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(x));
+  const today=records.filter(x=>dayKey(x.recorded_at)===dayKey(Date.now()));
+  const ci=today.find(x=>x.attendance_type==='check_in'),co=today.find(x=>x.attendance_type==='check_out');
+  const welcome=card('สวัสดี '+(u.name||''),'ข้อมูลจาก Cloudflare D1 · '+new Date().toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',dateStyle:'full'}));
+  const stats=h('div','grid');stats.append(stat('สถานะวันนี้',!ci?'ยังไม่ลงเวลา':co?'ลงเวลาครบ':'เข้างานแล้ว'),stat('เวลาเข้า',ci?new Date(ci.recorded_at).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}):'—'),stat('เวลาออก',co?new Date(co.recorded_at).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}):'—'),stat('รายการที่โหลด',records.length+' รายการ'));
+  const quick=card('เมนูใช้งาน');const links=h('div','row');[['#/attendance','ลงเวลาเข้า–ออก'],['#/attendance-history','ประวัติลงเวลา'],['#/leave-request','ยื่นคำขอลา'],['#/profile','ข้อมูลบัญชี']].forEach(([href,label])=>links.append(link(href,label)));quick.append(links);
+  const recent=card('รายการลงเวลาล่าสุด');recent.append(table(['วันและเวลา','รายการ','พิกัด'],records.slice(0,8).map(x=>[new Date(x.recorded_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}),x.attendance_type==='check_in'?'เข้างาน':'ออกงาน',x.latitude==null?'—':x.latitude+', '+x.longitude]),'ยังไม่มีข้อมูลลงเวลา'));
+  const parts=[welcome,stats,quick,recent];
+  if(u.role==='admin'){
+   const [people,leaves,locations]=await Promise.all([apiFetch('/api/admin/personnel'),apiFetch('/api/admin/leaves'),apiFetch('/api/admin/locations')]);
+   const pending=(people.personnel||[]).filter(x=>!x.is_active).length,pendingLeaves=(leaves.requests||[]).filter(x=>x.status==='pending').length,active=(people.personnel||[]).filter(x=>x.is_active).length;
+   const panel=card('ภาพรวมผู้บริหาร','ข้อมูลปัจจุบันจากฐานข้อมูล');const g=h('div','grid');g.append(stat('บัญชีใช้งาน',active),stat('รออนุมัติบัญชี',pending),stat('คำขอลารอพิจารณา',pendingLeaves),stat('จุดทำงาน',(locations.locations||[]).filter(x=>x.is_active).length));panel.append(g);const row=h('div','row');[['#/admin-users','จัดการบัญชี'],['#/admin-location','ปักหมุดสถานที่'],['#/admin-shifts','กะทำงาน'],['#/admin-leaves','อนุมัติคำขอ'],['#/admin-attendance','ตรวจสอบลงเวลา']].forEach(([href,label])=>row.append(link(href,label)));panel.append(row);parts.unshift(panel)
+  }
+  c.replaceChildren(...parts)
+ }catch(e){c.replaceChildren();adminMessage(c,e.message,'err')}
+}
 // แสดงประวัติลงเวลา พร้อมตัวกรองเดือน สถานะ และวันที่
 async function page_history(u){
  const out=document.getElementById('out'),mo=document.getElementById('mo'),st=document.getElementById('st'),dt=document.getElementById('dt');
